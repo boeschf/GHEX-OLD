@@ -38,7 +38,7 @@ namespace gridtools {
                     [[nodiscard]] T* allocate(size_type n, const void* cvptr = nullptr)
                     {
                         T* ptr = nullptr;
-                        GHEX_CHECK_CUDA_RESULT(cudaMalloc((void**)ptr, n*sizeof(T)));
+                        GHEX_CHECK_CUDA_RESULT(cudaMalloc((void**)&ptr, n*sizeof(T)));
                         return ptr;
                     }
 
@@ -59,6 +59,55 @@ namespace gridtools {
         } // namespace allocator
     } // namespace ghex
 } // namespace gridtools
+////#endif
+//#else
+//namespace gridtools {
+//    namespace ghex {
+//        namespace allocator {
+//
+//            namespace cuda {
+//
+//                template<typename T>
+//                struct allocator
+//                {
+//                    using size_type = std::size_t;
+//                    using value_type = T;
+//                    using traits = std::allocator_traits<allocator<T>>;
+//                    using is_always_equal = std::true_type;
+//
+//                    allocator() noexcept {}
+//                    template<typename U>
+//                    allocator(const allocator<U>&) noexcept {}
+//                    template<typename U>
+//                    allocator(allocator<U>&&) noexcept {}
+//
+//                    [[nodiscard]] T* allocate(size_type n, const void* cvptr = nullptr)
+//                    {
+//                        T* ptr = nullptr;
+//                        std::cout << "allocating   " << n << " elements = " << sizeof(T)*n << " bytes" << std::endl;
+//                        //GHEX_CHECK_CUDA_RESULT(cudaMalloc((void**)ptr, n*sizeof(T)));
+//                        ptr = reinterpret_cast<T*>(std::malloc(n*sizeof(T)));
+//                        return ptr;
+//                    }
+//
+//                    void deallocate(T* ptr, size_type n)
+//                    {
+//                        std::cout << "deallocating " << n << " elements = " << sizeof(T)*n << " bytes" << std::endl;
+//                        // not freeing because of CRAY-BUG
+//                        //GHEX_CHECK_CUDA_RESULT(cudaFree(ptr));
+//                    }
+//
+//                    void swap(const allocator&) {}
+//
+//                    friend bool operator==(const allocator&, const allocator&) { return true; }
+//                    friend bool operator!=(const allocator&, const allocator&) { return false; }
+//                };
+//
+//            } // namespace cuda
+//
+//        } // namespace allocator
+//    } // namespace ghex
+//} // namespace gridtools
 #endif
 
 #endif /* INCLUDED_GHEX_ALLOCATOR_CUDA_ALLOCATOR_HPP */
