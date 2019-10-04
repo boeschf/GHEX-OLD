@@ -41,6 +41,53 @@ namespace gridtools {
         };
 
 #ifdef __CUDACC__
+                template<typename T>
+                struct vector_type_
+                {
+                    T* m_data = nullptr;
+                    std::size_t m_size = 0;
+                    std::size_t m_capacity = 0;
+
+                    const T* data() const { return m_data; }
+                    T* data() { return m_data; }
+                    std::size_t size() const { return m_size; }
+                    std::size_t capacity() const { return m_capacity; }
+
+                    vector_type_() = default;
+                    vector_type_(const vector_type_&) = delete;
+                    vector_type_(vector_type_&& other)
+                    : m_data(other.m_data), m_size(other.m_size), m_capacity(other.m_capacity)
+                    {
+                        other.m_size = 0u;
+                        other.m_capacity = 0u;
+                    }
+
+                    void resize(std::size_t new_size)
+                    {
+                        if (new_size <= m_capacity)
+                        {
+                            m_size = new_size;
+                        }
+                        else
+                        {
+                            // not freeing because of CRAY-BUG
+                            //cudaFree(m_data);
+                            std::size_t new_capacity = std::max(new_size, (std::size_t)(m_capacity*1.6));
+                            cudaMalloc((void**)&m_data, new_capacity*sizeof(T));
+                            m_capacity = new_capacity;
+                            m_size = new_size;
+                        }
+                    }
+
+                    ~vector_type_()
+                    {
+                        if (m_capacity > 0u)
+                        {
+                            // not freeing because of CRAY-BUG
+                            //cudaFree(m_data);
+                        }
+                    }
+                };
         template<>
         struct arch_traits<gpu>
         {
@@ -48,7 +95,8 @@ namespace gridtools {
 
             using device_id_type          = int;
             using message_allocator_type  = allocator::cuda::allocator<unsigned char>;
-            using message_type            = tl::message_buffer<message_allocator_type>;
+            //using message_type            = tl::message_buffer<message_allocator_type>;
+            using message_type = vector_type_<unsigned char>;
 
             static device_id_type default_id() { return 0; }
 
