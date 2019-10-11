@@ -14,7 +14,6 @@
 #include <mpi.h>
 #include "gtest/gtest.h"
 #include <gridtools/tools/mpi_unit_test_driver/mpi_listener.hpp>
-#include <ghex/transport_layer/ucx/environment.hpp>
 
 #ifdef __CUDACC__
 #include <cuda_runtime.h>

@@ -33,6 +33,8 @@ namespace gridtools {
             /** @brief mpi transport tag */
             struct mpi_tag {};
 
+            /** @brief ucx transport tag */
+            struct ucx_tag {};
 
         } // namespace tl
 
