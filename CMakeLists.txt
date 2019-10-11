@@ -23,9 +23,16 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
+
+set(GHEX_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
+list(APPEND CMAKE_MODULE_PATH "${GHEX_MODULE_PATH}")
+message(">>>>>>>>>>>>>>>>${CMAKE_MODULE_PATH}")
+
 find_package(MPI REQUIRED)
 find_package(GridTools REQUIRED HINTS ${GridTools_DIR})
 find_package(Boost)
+find_package(PMIx)
+find_package(UCP)
 
 message(">>>>>>>>>>>>>>>>${GridTools_MODULE_PATH}")
 list(APPEND CMAKE_MODULE_PATH "${GridTools_MODULE_PATH}")
@@ -75,6 +82,14 @@ add_library(gtest_main_bench_mt ${GTEST_LIB_SOURCES} ${GTEST_MAIN_SOURCES} ./uti
 target_link_libraries(gtest_main_bench_mt MPI::MPI_CXX GridTools::gridtools )
 target_include_directories(gtest_main_bench_mt PRIVATE ${CMAKE_SOURCE_DIR}/include ${GTEST_INCLUDE_DIRS})
 target_compile_definitions(gtest_main_bench_mt PRIVATE GHEX_BENCHMARKS_USE_MULTI_THREADED_MPI)
+
+#add_library(gtest_main_pmix ${GTEST_LIB_SOURCES} ${GTEST_MAIN_SOURCES} ./utils/gtest_main_pmix.cpp )
+#target_link_libraries(gtest_main_pmix MPI::MPI_CXX ${PMIX_LIBRARY} GridTools::gridtools )
+#target_include_directories(gtest_main_pmix PRIVATE ${CMAKE_SOURCE_DIR}/include ${GTEST_INCLUDE_DIRS} ${PMIX_INCLUDE_DIR})
+
+add_library(gtest_main_ucx ${GTEST_LIB_SOURCES} ${GTEST_MAIN_SOURCES} ./utils/gtest_main_ucx.cpp )
+target_link_libraries(gtest_main_ucx MPI::MPI_CXX ${UCP_LIBRARY} GridTools::gridtools )
+target_include_directories(gtest_main_ucx PRIVATE ${CMAKE_SOURCE_DIR}/include ${GTEST_INCLUDE_DIRS} ${UCP_INCLUDE_DIR})
 
 add_subdirectory(tests)
 add_subdirectory(benchmarks)

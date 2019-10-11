@@ -41,13 +41,13 @@ namespace gridtools{
                 address_type address() const { return rank(); }
 
                 template<typename T>
-                void send(int dest, int tag, const T & value)
+                void send(int dest, int tag, const T & value) const
                 {
                     GHEX_CHECK_MPI_RESULT(MPI_Send(reinterpret_cast<const void*>(&value), sizeof(T), MPI_BYTE, dest, tag, *this));
                 }
 
                 template<typename T>
-                status recv(int source, int tag, T & value)
+                status recv(int source, int tag, T & value) const
                 {
                     MPI_Status status;
                     GHEX_CHECK_MPI_RESULT(MPI_Recv(reinterpret_cast<void*>(&value), sizeof(T), MPI_BYTE, source, tag, *this, &status));
@@ -55,13 +55,13 @@ namespace gridtools{
                 }
 
                 template<typename T>
-                void send(int dest, int tag, const T* values, int n)
+                void send(int dest, int tag, const T* values, int n) const
                 {
                     GHEX_CHECK_MPI_RESULT(MPI_Send(reinterpret_cast<const void*>(values), sizeof(T)*n, MPI_BYTE, dest, tag, *this));
                 }
 
                 template<typename T>
-                status recv(int source, int tag, T* values, int n)
+                status recv(int source, int tag, T* values, int n) const
                 {
                     MPI_Status status;
                     GHEX_CHECK_MPI_RESULT(MPI_Recv(reinterpret_cast<void*>(values), sizeof(T)*n, MPI_BYTE, source, tag, *this, &status));
@@ -69,19 +69,25 @@ namespace gridtools{
                 }
 
                 template<typename T> 
-                void broadcast(T& value, int root)
+                void broadcast(T& value, int root) const
                 {
                     GHEX_CHECK_MPI_RESULT(MPI_Bcast(&value, sizeof(T), MPI_BYTE, root, *this));
                 }
 
                 template<typename T> 
-                void broadcast(T * values, int n, int root)
+                void broadcast(T * values, int n, int root) const
                 {
                     GHEX_CHECK_MPI_RESULT(MPI_Bcast(values, sizeof(T)*n, MPI_BYTE, root, *this));
                 }
 
-                template<typename T>
-                future< std::vector<std::vector<T>> > all_gather(const std::vector<T>& payload, const std::vector<int>& sizes)
+                template<typename T, typename Int>
+                future< std::vector<std::vector<T>> > all_gather(const std::vector<T>& payload, const std::vector<Int>& sizes) const
+                {
+                    return all_gather(payload.data(), sizes);
+                }
+
+                template<typename T, typename Int>
+                future< std::vector<std::vector<T>> > all_gather(const T* payload, const std::vector<Int>& sizes) const
                 {
                     std::vector<std::vector<T>> res(size());
                     for (int neigh=0; neigh<size(); ++neigh)
@@ -98,7 +104,8 @@ namespace gridtools{
                     for (int neigh=0; neigh<size(); ++neigh)
                     {
                         m_reqs.push_back( handle_type{} );
-                        GHEX_CHECK_MPI_RESULT(MPI_Isend(reinterpret_cast<const void*>(payload.data()), sizeof(T)*payload.size(), MPI_BYTE, neigh, 99, *this, &m_reqs.back().get()));
+                        //GHEX_CHECK_MPI_RESULT(MPI_Isend(reinterpret_cast<const void*>(payload.data()), sizeof(T)*payload.size(), MPI_BYTE, neigh, 99, *this, &m_reqs.back().get()));
+                        GHEX_CHECK_MPI_RESULT(MPI_Isend(reinterpret_cast<const void*>(payload), sizeof(T)*sizes[rank()], MPI_BYTE, neigh, 99, *this, &m_reqs.back().get()));
                     }
                     for (auto& r : m_reqs)
                         r.wait();
@@ -124,7 +131,7 @@ namespace gridtools{
                 }
 
                 template<typename T>
-                future< std::vector<T> > all_gather(const T& payload)
+                future< std::vector<T> > all_gather(const T& payload) const
                 {
                     std::vector<T> res(size());
                     handle_type h;
