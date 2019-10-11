@@ -25,14 +25,30 @@ namespace gridtools {
         namespace tl {
             namespace ucx {
 
-                /*struct request
+                struct request
                 {
                     ucp_worker_h m_worker;
-                };*/
+                    void* m_ucx_ptr;
+                    bool m_ready = false;
+
+                    void wait()
+                    {
+                        while (!m_ready)
+                        {
+                            ucp_worker_progress(m_worker);
+                            auto status = ucp_request_check_status(m_ucx_ptr);
+                            m_ready = (status == UCS_OK);
+                        }
+                    }
+                };
 
                 struct internal_request
                 {
+                    static constexpr std::size_t s_padding = sizeof(request)+alignof(request)-1;
+                    static constexpr std::size_t s_mask    = ~std::size_t{alignof(request)-1};
+
                     unsigned char* m_data = nullptr;
+                    request* m_request = nullptr;
 
                     ~internal_request()
                     {
@@ -42,16 +58,35 @@ namespace gridtools {
 
                     internal_request() noexcept {}
 
-                    internal_request(std::size_t size_)
-                    : m_data{ size_>0u? new unsigned char[size_] : nullptr }
+                    internal_request(std::size_t size_, ucp_worker_h worker_)
+                    : m_data{
+                        size_>0u?
+                            new unsigned char[size_ + s_padding] :
+                            nullptr }
+                    , m_request{
+                        ::new( (void*)reinterpret_cast<unsigned char*>(
+                            (reinterpret_cast<std::uintptr_t>(m_data + size_) + alignof(request) - 1) & s_mask) )
+                        request{worker_, m_data + size_}}
                     {}
 
                     internal_request(const internal_request&) = delete;
 
                     internal_request(internal_request&& other) noexcept
                     : m_data{ other.m_data }
+                    , m_request{ other.m_request }
                     {
                         other.m_data = nullptr;
+                        other.m_request = nullptr;
+                    }
+
+                    void wait()
+                    {
+                        m_request->wait();
+                    }
+
+                    void* ucx_ptr()
+                    {
+                        return m_request->m_ucx_ptr;
                     }
                 };
 
@@ -81,8 +116,7 @@ namespace gridtools {
                         context_params.features =
                             UCP_FEATURE_TAG                   ; // tag matching
                         // request size
-                        //context_params.request_size = sizeof(request);
-                        context_params.request_size = 0;
+                        context_params.request_size = internal_request::s_padding;
                         // thread safety
                         context_params.mt_workers_shared = false;
                         // estimated number of connections
@@ -98,10 +132,9 @@ namespace gridtools {
 	    
                         // ask for UCP request size
 		                ucp_context_attr_t attr;
-		                attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
-		                ucp_context_query(m_context, &attr);
+                        attr.field_mask = UCP_ATTR_FIELD_REQUEST_SIZE;
+                        ucp_context_query(m_context, &attr);
                         m_req_size = attr.request_size;
-                        std::cout << "request size is " << attr.request_size << std::endl;
                     }
 
                     context(const context&) = delete;
@@ -184,7 +217,6 @@ namespace gridtools {
 	                        GHEX_CHECK_UCX_RESULT(
                                 ucp_worker_get_address(m_worker, &worker_address, &address_length)
                             );
-                            std::cout << "  worker address is length " << address_length << " (rank " << m_rank << ")" << std::endl;
                             ucp_ep_params_t ep_params;
                             ucp_ep_h ep_h;
                             ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
@@ -192,9 +224,6 @@ namespace gridtools {
                             GHEX_CHECK_UCX_RESULT(
                                 ucp_ep_create(m_worker, &ep_params, &ep_h)
                             );
-                            //std::cout << "my endpoint: " << std::endl;
-                            //std::cout << "my endpoint: (I am rank " << m_rank << ")" << std::endl;
-                            //ucp_ep_print_info(ep_h, stdout);
                             m_map.emplace( std::make_pair( m_rank, std::make_tuple(address{worker_address, address_length}, ep_h) ) );
                             ucp_worker_release_address(m_worker, worker_address);
                         }
@@ -207,20 +236,10 @@ namespace gridtools {
                             auto all_lengths   = comm.all_gather(my_length).get();
                             auto all_addresses = comm.all_gather(my_address, all_lengths).get();
 
-                            std::cout << "  all addresses" << std::endl;
-                            for (auto& x : all_addresses)
-                            {
-                                for (auto c : x)
-                                    std::cout << std::hex << (int)c;
-                                std::cout << std::endl;
-                            }
-                            std::cout << std::dec;
-
                             for (rank_type r=0; r<m_size; ++r)
                             {
                                 if (r==m_rank) continue;
                                 ucp_address_t* remote_worker_address = reinterpret_cast<ucp_address_t*>( all_addresses[r].data() );
-                                //std::size_t remote_worker_address_length = all_lengths[r];
                                 ucp_ep_params_t ep_params;
                                 ucp_ep_h ep_h;
                                 ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
@@ -228,9 +247,6 @@ namespace gridtools {
                                 GHEX_CHECK_UCX_RESULT(
                                     ucp_ep_create(m_worker, &ep_params, &ep_h)
                                 );
-                            //std::cout << "other endpoint: (I am rank " << m_rank << ")" << std::endl;
-                            //ucp_ep_print_info(ep_h, stdout);
-
 
                                 m_map.emplace(
                                     std::make_pair(
@@ -247,14 +263,12 @@ namespace gridtools {
                             }
                         }
 
-                        std::cout << "address lookup table has size " << m_map.size() << std::endl;
                     }
 
                     ~communicator_impl()
                     {
                         for (auto& x : m_map)
                         {
-                            //if (x.first == m_rank) continue;
                             ucp_ep_close_nb(std::get<1>(x.second), UCP_EP_CLOSE_MODE_FLUSH);
                         }
                     }
@@ -282,58 +296,40 @@ namespace gridtools {
                         int recv_payload = -9999;
 
                         // allocate memory for the request
-                        internal_request req_send(m_impl->m_context.m_req_size);
-                        internal_request req_recv(m_impl->m_context.m_req_size);
+                        internal_request req_send(m_impl->m_context.m_req_size, m_impl->m_worker);
+                        internal_request req_recv(m_impl->m_context.m_req_size, m_impl->m_worker);
                         
                         const auto send_tag = (std::uint_fast64_t{99} << 32) | (std::uint_fast64_t)(m_impl->m_rank);
                         const auto recv_tag = (std::uint_fast64_t{99} << 32) | (std::uint_fast64_t)(prev_rank);
 
                         auto next_ep = std::get<1>(m_impl->m_map[next_rank]);
-                        //auto prev_ep = std::get<1>(m_impl->m_map[prev_rank]);
 
-                        std::cout << "sending message from " << m_impl->m_rank << " to   " << next_rank << " with tag " << send_tag << std::endl; 
                         auto send_status = ucp_tag_send_nbr(
                             next_ep, 
                             &send_payload, sizeof(int), ucp_dt_make_contig(1), 
                             send_tag, 
-                            req_send.m_data + m_impl->m_context.m_req_size);
-                        std::cout << "recveing message at  " << m_impl->m_rank << " from " << prev_rank << " with tag " << recv_tag << std::endl; 
+                            req_send.ucx_ptr());
+                        if (send_status != UCS_OK && send_status != UCS_INPROGRESS)
+                        {
+                            std::cout << "something went wrong when sending!!!! err code = " << send_status << std::endl;
+                        }
+                        
                         auto recv_status = ucp_tag_recv_nbr(
                             m_impl->m_worker, 
                             &recv_payload, sizeof(int), ucp_dt_make_contig(1), 
                             recv_tag, 
                             //0xffffffff00000000ul,
                             0xfffffffffffffffful,
-                            req_recv.m_data + m_impl->m_context.m_req_size);
-
-                        if (send_status != UCS_OK && send_status != UCS_INPROGRESS)
-                        {
-                            std::cout << "something went wrong when sending!!!! err code = " << send_status << std::endl;
-                        }
-                        if (recv_status != UCS_OK && recv_status != UCS_INPROGRESS)
+                            req_recv.ucx_ptr());
+                        if (recv_status != UCS_OK)
                         {
                             std::cout << "something went wrong when receiving!!!! err code = " << recv_status << std::endl;
                         }
 
-                        std::cout << "progressing worker..." << std::endl;
-                        while (send_status == UCS_INPROGRESS)
-                        {
-                            ucp_worker_progress(m_impl->m_worker);
-                            send_status = ucp_request_check_status(req_send.m_data + m_impl->m_context.m_req_size);
-                        }
-                        while (recv_status == UCS_INPROGRESS)
-                        {
-                            ucp_worker_progress(m_impl->m_worker);
-                            recv_status = ucp_request_check_status(req_recv.m_data + m_impl->m_context.m_req_size);
-                        }
-                        if (send_status != UCS_OK)
-                        {
-                            std::cout << "final send status not ok!!" << std::endl;
-                        }
-                        if (recv_status != UCS_OK)
-                        {
-                            std::cout << "final recv status not ok!!" << std::endl;
-                        }
+                        if (send_status == UCS_OK) req_send.m_request->m_ready = true;
+
+                        req_send.wait();
+                        req_recv.wait();
 
                         std::cout << "received the following message : " << recv_payload << " from " << prev_rank << std::endl;
                     }
