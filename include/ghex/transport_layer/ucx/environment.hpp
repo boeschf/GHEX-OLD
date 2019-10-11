@@ -16,6 +16,7 @@
 #include <tuple>
 #include <memory>
 #include <cstring>
+#include <stdio.h>
 #include <iostream>
 #include "./error.hpp"
 
@@ -191,6 +192,9 @@ namespace gridtools {
                             GHEX_CHECK_UCX_RESULT(
                                 ucp_ep_create(m_worker, &ep_params, &ep_h)
                             );
+                            //std::cout << "my endpoint: " << std::endl;
+                            //std::cout << "my endpoint: (I am rank " << m_rank << ")" << std::endl;
+                            //ucp_ep_print_info(ep_h, stdout);
                             m_map.emplace( std::make_pair( m_rank, std::make_tuple(address{worker_address, address_length}, ep_h) ) );
                             ucp_worker_release_address(m_worker, worker_address);
                         }
@@ -202,6 +206,15 @@ namespace gridtools {
                             auto my_length     = std::get<0>(m_map[m_rank]).m_length;
                             auto all_lengths   = comm.all_gather(my_length).get();
                             auto all_addresses = comm.all_gather(my_address, all_lengths).get();
+
+                            std::cout << "  all addresses" << std::endl;
+                            for (auto& x : all_addresses)
+                            {
+                                for (auto c : x)
+                                    std::cout << std::hex << (int)c;
+                                std::cout << std::endl;
+                            }
+                            std::cout << std::dec;
 
                             for (rank_type r=0; r<m_size; ++r)
                             {
@@ -215,6 +228,10 @@ namespace gridtools {
                                 GHEX_CHECK_UCX_RESULT(
                                     ucp_ep_create(m_worker, &ep_params, &ep_h)
                                 );
+                            //std::cout << "other endpoint: (I am rank " << m_rank << ")" << std::endl;
+                            //ucp_ep_print_info(ep_h, stdout);
+
+
                                 m_map.emplace(
                                     std::make_pair(
                                         r, 
@@ -308,6 +325,14 @@ namespace gridtools {
                         {
                             ucp_worker_progress(m_impl->m_worker);
                             recv_status = ucp_request_check_status(req_recv.m_data + m_impl->m_context.m_req_size);
+                        }
+                        if (send_status != UCS_OK)
+                        {
+                            std::cout << "final send status not ok!!" << std::endl;
+                        }
+                        if (recv_status != UCS_OK)
+                        {
+                            std::cout << "final recv status not ok!!" << std::endl;
                         }
 
                         std::cout << "received the following message : " << recv_payload << " from " << prev_rank << std::endl;
