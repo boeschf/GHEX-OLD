@@ -5,9 +5,14 @@
 
 #include <gtest/gtest.h>
 
+template<typename Comm, typename Alloc>
+using callback_comm_t = gridtools::ghex::tl::callback_communicator<Comm,Alloc>;
+//using callback_comm_t = gridtools::ghex::tl::callback_communicator_ts<Comm,Alloc>;
+
 const int SIZE = 4000000;
 int mpi_rank;
 
+//#define GHEX_TEST_COUNT_ITERATIONS
 
 TEST(transport, send_multi) {
 
@@ -28,7 +33,7 @@ TEST(transport, send_multi) {
     using allocator_type = std::allocator<unsigned char>;
     using smsg_type      = gridtools::ghex::tl::shared_message_buffer<allocator_type>;
 
-    gridtools::ghex::tl::callback_communicator<comm_type,allocator_type> cb_comm(comm);
+    callback_comm_t<comm_type,allocator_type> cb_comm(comm);
 
     if (mpi_rank == 0) {
 
@@ -42,7 +47,7 @@ TEST(transport, send_multi) {
 
         std::array<int, 3> dsts = {1,2,3};
 
-        cb_comm.send_multi(dsts, 42, smsg);
+        cb_comm.send_multi(smsg, dsts, 42);
 
 #ifdef GHEX_TEST_COUNT_ITERATIONS
     int c = 0;
@@ -63,7 +68,7 @@ TEST(transport, send_multi) {
 
     } else {
         gridtools::ghex::tl::message_buffer<> rmsg{SIZE};
-        auto fut = comm.recv(0, 42, rmsg);
+        auto fut = comm.recv(rmsg, 0, 42);
         fut.wait();
 
         bool ok = true;

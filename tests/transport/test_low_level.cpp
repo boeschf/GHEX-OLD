@@ -5,6 +5,10 @@
 
 #include <gtest/gtest.h>
 
+template<typename Comm, typename Alloc>
+using callback_comm_t = gridtools::ghex::tl::callback_communicator<Comm,Alloc>;
+//using callback_comm_t = gridtools::ghex::tl::callback_communicator_ts<Comm,Alloc>;
+
 int rank;
 
 /**
@@ -18,10 +22,9 @@ void test1() {
     std::vector<unsigned char> rmsg(10);
 
     if ( rank == 0 ) {
-        //sr.blocking_send(smsg, 1, 1);
-        sr.send(1, 1, smsg).get();
+        sr.send(smsg, 1, 1).get();
     } else if (rank == 1) {
-        auto fut = sr.recv(0, 1, rmsg);
+        auto fut = sr.recv(rmsg, 0, 1);
 
 #ifdef GHEX_TEST_COUNT_ITERATIONS
         int c = 0;
@@ -52,7 +55,7 @@ void test2() {
     using allocator_type = std::allocator<unsigned char>;
     using smsg_type      = gridtools::ghex::tl::shared_message_buffer<allocator_type>;
     using comm_type      = std::remove_reference_t<decltype(sr)>;
-    gridtools::ghex::tl::callback_communicator<comm_type,allocator_type> cb_comm(sr);
+    callback_comm_t<comm_type,allocator_type> cb_comm(sr);
 
     std::vector<unsigned char> smsg = {1,2,3,4,5,6,7,8,9,10};
     smsg_type rmsg(10);
@@ -60,10 +63,10 @@ void test2() {
     bool arrived = false;
 
     if ( rank == 0 ) {
-        auto fut = sr.send(1, 1, smsg);
+        auto fut = sr.send(smsg, 1, 1);
         fut.wait();
     } else if (rank == 1) {
-        cb_comm.recv(0, 1, rmsg, [ &arrived](int /*src*/, int /* tag */, const smsg_type&) { arrived = true; });
+        cb_comm.recv(rmsg, 0, 1, [ &arrived](const smsg_type&, int /*src*/, int /* tag */) { arrived = true; });
 
 #ifdef GHEX_TEST_COUNT_ITERATIONS
         int c = 0;
@@ -106,9 +109,9 @@ void test1_mesg() {
     gridtools::ghex::tl::message_buffer<> rmsg{40};
 
     if ( rank == 0 ) {
-        sr.send(1, 1, smsg).get();
+        sr.send(smsg, 1, 1).get();
     } else if (rank == 1) {
-        auto fut = sr.recv(0, 1, rmsg);
+        auto fut = sr.recv(rmsg, 0, 1);
 
 #ifdef GHEX_TEST_COUNT_ITERATIONS
         int c = 0;
@@ -138,7 +141,7 @@ void test2_mesg() {
     using smsg_type      = gridtools::ghex::tl::shared_message_buffer<allocator_type>;
     using comm_type      = std::remove_reference_t<decltype(sr)>;
 
-    gridtools::ghex::tl::callback_communicator<comm_type,allocator_type> cb_comm(sr);
+    callback_comm_t<comm_type,allocator_type> cb_comm(sr);
 
     gridtools::ghex::tl::message_buffer<> smsg{40};
     smsg_type rmsg{40};
@@ -152,10 +155,10 @@ void test2_mesg() {
     bool arrived = false;
 
     if ( rank == 0 ) {
-        auto fut = sr.send(1, 1, smsg);
+        auto fut = sr.send(smsg, 1, 1);
         fut.wait();
     } else if (rank == 1) {
-        cb_comm.recv(0, 1, rmsg, [ &arrived](int /* src */, int /* tag */, const smsg_type&) { arrived = true; });
+        cb_comm.recv(rmsg, 0, 1, [ &arrived](const smsg_type&, int /* src */, int /* tag */) { arrived = true; });
 
 #ifdef GHEX_TEST_COUNT_ITERATIONS
         int c = 0;
@@ -199,9 +202,9 @@ void test1_shared_mesg() {
     gridtools::ghex::tl::shared_message_buffer<> rmsg{40};
 
     if ( rank == 0 ) {
-        sr.send(1, 1, smsg).get();
+        sr.send(smsg, 1, 1).get();
     } else if (rank == 1) {
-        auto fut = sr.recv(0, 1, rmsg);
+        auto fut = sr.recv(rmsg, 0, 1);
 
 #ifdef GHEX_TEST_COUNT_ITERATIONS
         int c = 0;
