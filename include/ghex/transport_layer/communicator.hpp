@@ -11,6 +11,8 @@
 #ifndef INCLUDED_GHEX_TL_COMMUNICATOR_HPP
 #define INCLUDED_GHEX_TL_COMMUNICATOR_HPP
 
+#include "./tags.hpp"
+
 namespace gridtools {
 
     namespace ghex {
@@ -29,12 +31,6 @@ namespace gridtools {
                 // using address_type  = ...;
                 // template<typename T>
                 // using future = ...;
-
-            /** @brief mpi transport tag */
-            struct mpi_tag {};
-
-            /** @brief ucx transport tag */
-            struct ucx_tag {};
 
         } // namespace tl
 

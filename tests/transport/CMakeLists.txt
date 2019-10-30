@@ -13,7 +13,7 @@ foreach(t_ ${_tests})
 
 endforeach(t_ ${_tests})
 
-set(_tests_ucx test_ucx_init)
+set(_tests_ucx test_ucx_init test_ucx_init2)
 
 foreach(t_ ${_tests_ucx})
 
