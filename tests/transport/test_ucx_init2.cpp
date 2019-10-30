@@ -21,21 +21,34 @@ using context_type = gridtools::ghex::tl::context<gridtools::ghex::tl::ucx_tag>;
 
 TEST(ucx, init) 
 {
-    //bool ok = true;
-    //EXPECT_TRUE(ok);
-
-    /*gridtools::ghex::tl::mpi::setup_communicator comm(MPI_COMM_WORLD);
-
-    gridtools::ghex
-
-    gridtools::ghex::tl::context<gridtools::ghex::tl::ucx_tag> ucx_context(comm.size());*/
-
     context_type ucx_context{ db_type{MPI_COMM_WORLD}  };
+
+    { 
+        auto comm0_0 = ucx_context.make_communicator();
+        auto comm1_0 = ucx_context.make_communicator();
+
+        ucx_context.synchronize();
+    }   
 
     auto comm0 = ucx_context.make_communicator();
     auto comm1 = ucx_context.make_communicator();
 
-    std::cout << comm0 << std::endl;
-    std::cout << comm1 << std::endl;
+    ucx_context.synchronize();
 
+    if (comm0.rank() == 0)
+    {
+        std::cout << comm0 << std::endl;
+        std::cout << "number of PEs = " << comm0.size() << std::endl;
+    }
+
+    int left_neighbor = (comm0.rank()+comm0.size()-1)%comm0.size();
+    int right_neighbor = (comm0.rank()+comm0.size()+1)%comm0.size();
+
+    auto ep_0_right_1 = comm0.connect(right_neighbor,1);
+    auto ep_1_left_0  = comm1.connect(left_neighbor, 0);
+
+    int msg = 99;
+
+    comm0.send(msg,ep_0_right_1);
+    comm1.recv(msg,ep_1_left_0);
 }

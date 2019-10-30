@@ -23,6 +23,8 @@ namespace gridtools {
 
                 struct context
                 {
+                    using uuid_t = ::gridtools::ghex::tl::uuid::type;
+
                     struct type_erased_endpoint_db_t
                     {
                         struct iface
@@ -30,8 +32,11 @@ namespace gridtools {
                             virtual int rank() = 0;
                             virtual int size() = 0;
                             virtual int est_size() = 0;
-                            virtual void insert_endpoint(const endpoint& ep) = 0;
-                            virtual void erase_endpoint(const endpoint& ep) = 0;
+                            virtual void insert(uuid_t id, const address& addr) = 0;
+                            virtual void erase(uuid_t id) = 0;
+                            virtual void synchronize() = 0;
+                            virtual address* find(uuid_t id) = 0;
+                            virtual uuid_t* find(int rank, int index) = 0;
                             virtual ~iface() {}
                         };
 
@@ -46,8 +51,11 @@ namespace gridtools {
                             int rank() override { return m_impl.rank(); }
                             int size() override { return m_impl.size(); }
                             int est_size() override { return m_impl.est_size(); }
-                            void insert_endpoint(const endpoint& ep) override { m_impl.insert_endpoint(ep); }
-                            void erase_endpoint(const endpoint& ep) override { m_impl.erase_endpoint(ep); }
+                            void insert(uuid_t id, const address& addr) override { m_impl.insert(id,addr); }
+                            void erase(uuid_t id) override { m_impl.erase(id); }
+                            void synchronize() override { m_impl.synchronize(); }
+                            address* find(uuid_t id) override { return m_impl.find(id); }
+                            uuid_t* find(int rank, int index) override { return m_impl.find(rank,index); }
                         };
 
                         std::unique_ptr<iface> m_impl;
@@ -69,8 +77,11 @@ namespace gridtools {
                         inline int rank() const { return m_impl->rank(); }
                         inline int size() const { return m_impl->size(); }
                         inline int est_size() const { return m_impl->est_size(); }
-                        inline void insert_endpoint(const endpoint& ep) { m_impl->insert_endpoint(ep); }
-                        inline void erase_endpoint(const endpoint& ep) { m_impl->erase_endpoint(ep); }
+                        inline void insert(uuid_t id, const address& addr) { m_impl->insert(id,addr); }
+                        inline void erase(uuid_t id) { m_impl->erase(id); }
+                        inline void synchronize() { m_impl->synchronize(); }
+                        inline address* find(uuid_t id) { return m_impl->find(id); }
+                        inline uuid_t* find(int rank, int index) { return m_impl->find(rank,index); }
                     };
 
 
@@ -143,22 +154,91 @@ namespace gridtools {
                     {
                         auto comm = communicator_base(this);
                         comm.m_context = this;
-                        m_db.insert_endpoint(comm.m_endpoint);
+                        m_db.insert(comm.m_ep.m_id, comm.m_address);
                         return comm;
                     }
 
                     void notify_destruction(communicator_base* comm)
                     {
-                        m_db.erase_endpoint(comm->m_endpoint);
+                        m_db.erase(comm->m_ep.m_id);
+                    }
+
+                    void synchronize()
+                    {
+                        m_db.synchronize();
+                    }
+                
+                    uuid_t* get_id(int rank, int index)
+                    {
+                        return m_db.find(rank, index);
                     }
                 };
                     
                 
+
+                
                 communicator_base::~communicator_base()
                 {
-                    m_context->notify_destruction(this);
-                    ucp_ep_close_nb(m_endpoint.m_ep_h, UCP_EP_CLOSE_MODE_FLUSH);
-                    ucp_worker_destroy(m_worker);
+                    if (m_context)
+                    {
+                        for (const auto& kvp : m_ep_cache)
+                        {
+                            ucp_ep_close_nb(kvp.second.m_ep_h, UCP_EP_CLOSE_MODE_FLUSH);
+                        }
+                        m_context->notify_destruction(this);
+                        ucp_ep_close_nb(m_ep.m_ep_h, UCP_EP_CLOSE_MODE_FLUSH);
+                        ucp_worker_destroy(m_worker);
+                    }
+                }
+
+                communicator_base::communicator_base(communicator_base&& other)
+                : m_context{other.m_context}
+                , m_worker{other.m_worker}
+                , m_address{std::move(other.m_address)}
+                , m_ep{other.m_ep}
+                , m_ep_cache{std::move(other.m_ep_cache)}
+                {
+                    other.m_context = nullptr;
+                }
+                
+                int communicator_base::rank() const { return m_context->m_db.rank(); }
+                int communicator_base::size() const { return m_context->m_db.size(); }
+
+                endpoint communicator_base::connect(uuid_t id)
+                {
+                    auto it = m_ep_cache.find(id);
+                    if (it != m_ep_cache.end())
+                        return it->second;
+                    auto addr = m_context->m_db.find(id);
+                    if (addr) 
+                    {
+                        ucp_address_t* remote_worker_address = addr->get();
+                        ucp_ep_params_t ep_params;
+                        ucp_ep_h ep_h;
+                        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+                        ep_params.address    = remote_worker_address;	    
+                        GHEX_CHECK_UCX_RESULT(
+                            ucp_ep_create(m_worker, &ep_params, &ep_h)
+                        );
+                        m_ep_cache[id] = endpoint{id, ep_h};
+                        return {id, ep_h};
+                    }
+                    else 
+                        throw std::runtime_error("endpoint is not available");
+                }
+                
+                endpoint communicator_base::connect(int rank, int index)
+                {
+                    auto id = m_context->m_db.find(rank,index);
+                    if (id)
+                        return connect(*id);
+                    else
+                        throw std::runtime_error("endpoint is not available");
+                }
+                
+                auto communicator_base::get_id(int rank, int index)
+                {
+                    return m_context->get_id(rank,index);
                 }
                 
             } // namespace ucx
@@ -175,6 +255,9 @@ namespace gridtools {
                 {}
 
                 auto make_communicator() { return m_impl->make_communicator(); }
+                void synchronize() { m_impl->synchronize(); }
+                
+                auto get_id(int rank, int index) { return m_impl->get_id(rank,index); }
             }; 
 
         } // namespace tl
