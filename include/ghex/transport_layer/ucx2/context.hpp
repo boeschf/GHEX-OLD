@@ -172,6 +172,9 @@ namespace gridtools {
                     {
                         return m_db.find(rank, index);
                     }
+                
+                    int rank() { return m_db.rank(); }
+                    int size() { return m_db.size(); }
                 };
                     
                 
@@ -258,6 +261,9 @@ namespace gridtools {
                 void synchronize() { m_impl->synchronize(); }
                 
                 auto get_id(int rank, int index) { return m_impl->get_id(rank,index); }
+
+                int rank() { return m_impl->rank(); }
+                int size() { return m_impl->size(); }
             }; 
 
         } // namespace tl
