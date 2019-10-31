@@ -10,6 +10,7 @@
  */
 //#include <ghex/transport_layer/callback_communicator.hpp>
 #include <ghex/transport_layer/ucx2/endpoint_db_mpi.hpp>
+#include <ghex/transport_layer/ucx2/endpoint_db_mpi_simple.hpp>
 #include <ghex/transport_layer/mpi/setup.hpp>
 #include <ghex/transport_layer/ucx2/context.hpp>
 #include <ghex/transport_layer/message_buffer.hpp>
@@ -21,7 +22,8 @@
 
 namespace ghex = gridtools::ghex;
 
-using db_type      = ghex::tl::ucx::endpoint_db_mpi;
+using db_type       = ghex::tl::ucx::endpoint_db_mpi;
+using mpi_context  = ghex::tl::ucx::endpoint_db_mpi_simple;
 using context_type = ghex::tl::context<gridtools::ghex::tl::ucx_tag>;
 using comm_type    = ghex::tl::ucx::communicator_base;
 
@@ -31,10 +33,9 @@ TEST(transport_layer, symmetric_bidirectional_ring)
     int num_threads = 4;
     const std::size_t size = 1<<18;
 
-    // make a ucx context which has access to a connection database
-    // here the database is local to all ranks -> big,
-    // but one can also make a database using pmi for example
-    context_type context{ db_type{MPI_COMM_WORLD} };
+    // make a ucx context whithout a connection database - rank and size information is enough
+    // since we're using explicit MPI calls for out-of-band connection establishment
+    context_type context{ mpi_context{MPI_COMM_WORLD} };
     
     int mpi_rank      = context.rank();
     int num_mpi_ranks = context.size();
