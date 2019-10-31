@@ -31,7 +31,7 @@ TEST(transport_layer, symmetric_bidirectional_ring)
     const std::size_t size = 1<<18;
 
     // make a ucx context which has access to a connection database
-    // here the database is local to all rank -> big,
+    // here the database is local to all ranks -> big,
     // but one can also make a database using pmi for example
     context_type context{ db_type{MPI_COMM_WORLD} };
 

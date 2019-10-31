@@ -39,8 +39,7 @@ namespace gridtools {
                     {
                         ucp_worker_params_t params;
 		                params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-		                //params.thread_mode = UCS_THREAD_MODE_SINGLE;
-		                params.thread_mode = UCS_THREAD_MODE_MULTI;
+		                params.thread_mode = UCS_THREAD_MODE_SINGLE;
 	                    GHEX_CHECK_UCX_RESULT(
 		                    ucp_worker_create (c->m_context, &params, &m_worker)
                         );
