@@ -113,7 +113,8 @@ namespace gridtools {
                         context_params.features =
                             UCP_FEATURE_TAG                   ; // tag matching
                         // request size
-                        context_params.request_size = 64;
+                        //context_params.request_size = 64;
+                        context_params.request_size = 0;
                         // thread safety
                         context_params.mt_workers_shared = 1;
                         // estimated number of connections
@@ -209,6 +210,7 @@ namespace gridtools {
 
                 endpoint communicator_base::connect(uuid_t id)
                 {
+                    if (id == m_ep.m_id) return m_ep;
                     auto it = m_ep_cache.find(id);
                     if (it != m_ep_cache.end())
                         return it->second;

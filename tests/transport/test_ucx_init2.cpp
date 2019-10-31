@@ -235,3 +235,76 @@ TEST(transport_layer, symmetric_bidirectional_ring_self_discover)
         t.join();
 }
 
+TEST(transport_layer, all_to_1)
+{
+    int num_threads = 4;
+    const std::size_t size = 1<<18;
+
+    // make a ucx context which has access to a connection database
+    // here the database is local to all ranks -> big,
+    // but one can also make a database using pmi for example
+    context_type context{ db_type{MPI_COMM_WORLD} };
+
+    // create as many communicators as there are threads
+    std::vector<comm_type> comms;
+    for (int n=0; n<num_threads; ++n)
+        comms.push_back( context.make_communicator() );
+
+    // synchronize the context -> database knows now about all communicators
+    context.synchronize();
+
+    int rank       = context.rank();
+    int left_rank  = (context.rank()+context.size()-1)%context.size();
+    int right_rank = (context.rank()+context.size()+1)%context.size();
+
+    // connect to left and right endpoint for each communicator
+    std::vector<ghex::tl::ucx::endpoint> endpoints;
+    for (int n=1; n<num_threads; ++n)
+    {
+        endpoints.push_back(comms[n].connect(left_rank,0) );
+    }
+    
+    std::vector<int> check_rank;
+    std::vector<int> check_thread;
+
+    auto send_func = [&](int th_id) {
+        // make some message buffers
+        ghex::tl::message_buffer<> send_msg(size);
+
+        // fill values for checking
+        send_msg.data<int>()[0]  = rank;
+        send_msg.data<int>()[1]  = th_id;
+
+        comms[th_id].send(send_msg, endpoints[th_id-1]).wait();
+    };
+
+    auto recv_func = [&](int th_id) {
+        // make some message buffers
+        ghex::tl::message_buffer<> recv_msg(size);
+
+        for (int n=1; n<num_threads; ++n)
+        {
+            comms[th_id].recv(recv_msg).wait();
+            check_rank.push_back(recv_msg.data<int>()[0]);
+            check_thread.push_back(recv_msg.data<int>()[1]);
+        }
+    };
+
+    
+    // run the exchange in seperate threads
+    std::vector<std::thread> threads;
+    threads.push_back( std::thread{recv_func, 0});
+    for(int n=1; n<num_threads; ++n)
+        threads.push_back( std::thread{send_func, n});
+    // wait for the exchange to finish
+    for (auto& t : threads)
+        t.join();
+
+    std::sort(check_thread.begin(), check_thread.end());
+    for (int n=1; n<num_threads; ++n)
+    {
+        EXPECT_TRUE( check_rank[n-1] == right_rank );
+        EXPECT_TRUE( check_thread[n-1] == n );
+    }
+}
+

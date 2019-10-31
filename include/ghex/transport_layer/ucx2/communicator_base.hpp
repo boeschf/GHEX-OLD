@@ -78,6 +78,7 @@ namespace gridtools {
                         uuid_t id;
                         address addr; 
                         info.unpack(id, addr);
+                        if (id == m_ep.m_id) return m_ep;
                         auto it = m_ep_cache.find(id);
                         if (it != m_ep_cache.end())
                             return it->second;
@@ -135,6 +136,30 @@ namespace gridtools {
                             ucp_dt_make_contig(1),                           // data type
                             ep.m_id,                                         // tag: sender uuid
                             ~uuid_t(0ul),                                    // tag mask
+                            &communicator_base::empty_recv_callback);        // callback function pointer: empty here
+                        if(!UCS_PTR_IS_ERR(ret))
+                        {
+                            return {(void*)ret, m_worker};
+                        }
+                        else
+                        {
+                            // an error occurred
+                            throw std::runtime_error("ghex: ucx error - recv operation failed");
+                        }
+                    }
+
+                    // receive from anybody
+                    template<typename Message>
+                    request recv(Message& msg)
+                    {
+                        // match tag to ep.m_id
+                        ucs_status_ptr_t ret = ucp_tag_recv_nb(
+                            m_worker,                                        // worker
+                            msg.data(),                                      // buffer
+                            msg.size()*sizeof(typename Message::value_type), // buffer size
+                            ucp_dt_make_contig(1),                           // data type
+                            0ul,                                             // tag: sender uuid
+                            uuid_t(0ul),                                     // tag mask: match all tags
                             &communicator_base::empty_recv_callback);        // callback function pointer: empty here
                         if(!UCS_PTR_IS_ERR(ret))
                         {
