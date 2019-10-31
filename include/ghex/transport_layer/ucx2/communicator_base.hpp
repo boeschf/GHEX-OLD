@@ -13,6 +13,7 @@
 
 #include <ucp/api/ucp.h>
 #include "./endpoint.hpp"
+#include "./request.hpp"
 #include <iostream>
 
 namespace gridtools {
@@ -38,7 +39,8 @@ namespace gridtools {
                     {
                         ucp_worker_params_t params;
 		                params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-		                params.thread_mode = UCS_THREAD_MODE_SINGLE;
+		                //params.thread_mode = UCS_THREAD_MODE_SINGLE;
+		                params.thread_mode = UCS_THREAD_MODE_MULTI;
 	                    GHEX_CHECK_UCX_RESULT(
 		                    ucp_worker_create (c->m_context, &params, &m_worker)
                         );
@@ -82,12 +84,35 @@ namespace gridtools {
                     {
                         return send(msg,connect(rank,index));
                     }*/
+
+                    static void empty_send_callback(void *, ucs_status_t) {}
+                    static void empty_recv_callback(void *, ucs_status_t, ucp_tag_recv_info_t*) {}
                     
                     template<typename Message>
-                    int send(const Message& msg, endpoint ep)
+                    request send(const Message& msg, endpoint ep)
                     {
                         // send with tag = uuid
-                        return 1; 
+                        ucs_status_ptr_t ret = ucp_tag_send_nb(
+                            ep.m_ep_h,                                       // destination
+                            msg.data(),                                      // buffer
+                            msg.size()*sizeof(typename Message::value_type), // buffer size
+                            ucp_dt_make_contig(1),                           // data type
+                            m_ep.m_id,                                       // tag: my uuid
+                            &communicator_base::empty_send_callback);        // callback function pointer: empty here
+                        if (reinterpret_cast<std::uintptr_t>(ret) == UCS_OK)
+                        {
+                            // send operation is completed immediately and the call-back function is not invoked
+                            return {};
+                        } 
+                        else if(!UCS_PTR_IS_ERR(ret))
+                        {
+                            return {(void*)ret, m_worker};
+                        }
+                        else
+                        {
+                            // an error occurred
+                            throw std::runtime_error("ghex: ucx error - send operation failed");
+                        }
                     }
 
                     /*template<typename Message>
@@ -100,10 +125,26 @@ namespace gridtools {
                     }*/
 
                     template<typename Message>
-                    int recv(Message& msg, endpoint ep)
+                    request recv(Message& msg, endpoint ep)
                     {
                         // match tag to ep.m_id
-                        return 2;
+                        ucs_status_ptr_t ret = ucp_tag_recv_nb(
+                            m_worker,                                        // worker
+                            msg.data(),                                      // buffer
+                            msg.size()*sizeof(typename Message::value_type), // buffer size
+                            ucp_dt_make_contig(1),                           // data type
+                            ep.m_id,                                         // tag: sender uuid
+                            ~uuid_t(0ul),                                    // tag mask
+                            &communicator_base::empty_recv_callback);        // callback function pointer: empty here
+                        if(!UCS_PTR_IS_ERR(ret))
+                        {
+                            return {(void*)ret, m_worker};
+                        }
+                        else
+                        {
+                            // an error occurred
+                            throw std::runtime_error("ghex: ucx error - recv operation failed");
+                        }
                     }
 
                     /*template<typename Message>

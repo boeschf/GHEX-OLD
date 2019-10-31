@@ -178,7 +178,7 @@ namespace gridtools {
                             }
                         }
 
-                        if (m_rank == 0)
+                        /*if (m_rank == 0)
                         {
                             std::cout << "registered endpoints:\n";
                             for (int r=0; r<m_size; ++r)
@@ -190,7 +190,7 @@ namespace gridtools {
                                     << "    " << m_global_endpoints[k] << "\n";
                             }
                             std::cout << std::endl;
-                        }
+                        }*/
                     }
 
                 };
