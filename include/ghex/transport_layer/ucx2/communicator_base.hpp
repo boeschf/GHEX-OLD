@@ -72,18 +72,6 @@ namespace gridtools {
                     endpoint connect(int rank, int index);
                     auto get_id(int rank, int index);
                     
-                    /*template<typename Message>
-                    int send(const Message& msg, uuid_t id)
-                    {
-                        return send(msg,connect(id));
-                    }*/
-                    
-                    /*template<typename Message>
-                    int send(const Message& msg, int rank, int index)
-                    {
-                        return send(msg,connect(rank,index));
-                    }*/
-
                     static void empty_send_callback(void *, ucs_status_t) {}
                     static void empty_recv_callback(void *, ucs_status_t, ucp_tag_recv_info_t*) {}
                     
@@ -114,15 +102,6 @@ namespace gridtools {
                         }
                     }
 
-                    /*template<typename Message>
-                    int recv(Message& msg, int rank, int index)
-                    {
-                        if(auto ptr = get_id(rank,index))
-                            return recv(msg, *ptr);
-                        else 
-                            return 0;
-                    }*/
-
                     template<typename Message>
                     request recv(Message& msg, endpoint ep)
                     {
@@ -145,13 +124,6 @@ namespace gridtools {
                             throw std::runtime_error("ghex: ucx error - recv operation failed");
                         }
                     }
-
-                    /*template<typename Message>
-                    int recv(Message& msg, uuid_t id)
-                    {
-                        // match tag to id
-                        return 2;
-                    }*/
                     
                     template<class CharT, class Traits = std::char_traits<CharT>>
                     friend std::basic_ostream<CharT,Traits>& operator<<(std::basic_ostream<CharT,Traits>& os, const communicator_base& comm)

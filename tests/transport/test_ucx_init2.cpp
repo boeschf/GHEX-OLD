@@ -68,41 +68,41 @@ TEST(transport_layer, symmetric_bidirectional_ring)
             
     // this function is invoked by every thread
     auto func = [&](int th_id) {
-            // make some message buffers
-            ghex::tl::message_buffer<> sendleft_msg(size);
-            ghex::tl::message_buffer<> recvright_msg(size);
-            ghex::tl::message_buffer<> sendright_msg(size);
-            ghex::tl::message_buffer<> recvleft_msg(size);
+        // make some message buffers
+        ghex::tl::message_buffer<> sendleft_msg(size);
+        ghex::tl::message_buffer<> recvright_msg(size);
+        ghex::tl::message_buffer<> sendright_msg(size);
+        ghex::tl::message_buffer<> recvleft_msg(size);
 
-            // fill values for checking
-            sendleft_msg.data<int>()[0]  = rank;
-            sendleft_msg.data<int>()[1]  = th_id;
-            sendright_msg.data<int>()[0] = rank;
-            sendright_msg.data<int>()[1] = th_id;
+        // fill values for checking
+        sendleft_msg.data<int>()[0]  = rank;
+        sendleft_msg.data<int>()[1]  = th_id;
+        sendright_msg.data<int>()[0] = rank;
+        sendright_msg.data<int>()[1] = th_id;
 
-            // send and recieve to/from left and right neighbors
-            auto sfutl = comms[th_id].send(sendleft_msg,  left_endpoints[th_id]);
-            auto sfutr = comms[th_id].send(sendright_msg, right_endpoints[th_id]);
-            auto rfutl = comms[th_id].recv(recvleft_msg,  left_endpoints[th_id]);
-            auto rfutr = comms[th_id].recv(recvright_msg, right_endpoints[th_id]);
+        // send and recieve to/from left and right neighbors
+        auto sfutl = comms[th_id].send(sendleft_msg,  left_endpoints[th_id]);
+        auto sfutr = comms[th_id].send(sendright_msg, right_endpoints[th_id]);
+        auto rfutl = comms[th_id].recv(recvleft_msg,  left_endpoints[th_id]);
+        auto rfutr = comms[th_id].recv(recvright_msg, right_endpoints[th_id]);
 
-            // wait for communication to finish
-            sfutl.wait();
-            rfutl.wait();
-            sfutr.wait();
-            rfutl.wait();
+        // wait for communication to finish
+        sfutl.wait();
+        rfutl.wait();
+        sfutr.wait();
+        rfutl.wait();
 
-            // calculate the values that should have arrived
-            int left_rank    = (th_id == 0) ? ((rank+context.size()-1)%context.size()) : rank; 
-            int left_thread  = (th_id == 0) ? (num_threads-1) : th_id-1; 
-            int right_rank   = (th_id == num_threads-1) ? ((rank+1)%context.size()) : rank; 
-            int right_thread = (th_id == num_threads-1) ? (0) : th_id+1; 
+        // calculate the values that should have arrived
+        int left_rank    = (th_id == 0) ? ((rank+context.size()-1)%context.size()) : rank; 
+        int left_thread  = (th_id == 0) ? (num_threads-1) : th_id-1; 
+        int right_rank   = (th_id == num_threads-1) ? ((rank+1)%context.size()) : rank; 
+        int right_thread = (th_id == num_threads-1) ? (0) : th_id+1; 
 
-            // check
-            EXPECT_TRUE( recvleft_msg.data<int>()[0] == left_rank);
-            EXPECT_TRUE( recvleft_msg.data<int>()[1] == left_thread);
-            EXPECT_TRUE( recvright_msg.data<int>()[0] == right_rank);
-            EXPECT_TRUE( recvright_msg.data<int>()[1] == right_thread);
+        // check
+        EXPECT_TRUE( recvleft_msg.data<int>()[0] == left_rank);
+        EXPECT_TRUE( recvleft_msg.data<int>()[1] == left_thread);
+        EXPECT_TRUE( recvright_msg.data<int>()[0] == right_rank);
+        EXPECT_TRUE( recvright_msg.data<int>()[1] == right_thread);
     };
 
     // run the exchange in seperate threads
@@ -110,8 +110,16 @@ TEST(transport_layer, symmetric_bidirectional_ring)
     futures.reserve(num_threads);
     for(int n=0; n<num_threads; ++n)
         futures.push_back(std::async(std::launch::async, func, n));
-
     // wait for the exchange to finish
+    for (auto& fut : futures) 
+        fut.wait();
+
+    // run the exchange in seperate threads
+    std::vector<std::thread> threads;
     for(int n=0; n<num_threads; ++n)
-        futures[n].wait();
+        threads.push_back( std::thread{func, n});
+    // wait for the exchange to finish
+    for (auto& t : threads)
+        t.join();
+
 }
