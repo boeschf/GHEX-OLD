@@ -13,6 +13,7 @@
 
 #include <ucp/api/ucp.h>
 #include "./endpoint.hpp"
+#include "./endpoint_info.hpp"
 #include "./request.hpp"
 #include <iostream>
 
@@ -65,11 +66,32 @@ namespace gridtools {
 
                     ~communicator_base();
 
+                    endpoint_info packed_endpoint() const { return {m_ep.m_id, m_address}; }
+
                     int rank() const;
                     int size() const;
                     
                     endpoint connect(uuid_t id);
                     endpoint connect(int rank, int index);
+                    endpoint connect(const endpoint_info& info)
+                    {
+                        uuid_t id;
+                        address addr; 
+                        info.unpack(id, addr);
+                        auto it = m_ep_cache.find(id);
+                        if (it != m_ep_cache.end())
+                            return it->second;
+                        ucp_address_t* remote_worker_address = addr.get();
+                        ucp_ep_params_t ep_params;
+                        ucp_ep_h ep_h;
+                        ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
+                        ep_params.address    = remote_worker_address;	    
+                        GHEX_CHECK_UCX_RESULT(
+                            ucp_ep_create(m_worker, &ep_params, &ep_h)
+                        );
+                        m_ep_cache[id] = endpoint{id, ep_h};
+                        return {id, ep_h};
+                    }
                     auto get_id(int rank, int index);
                     
                     static void empty_send_callback(void *, ucs_status_t) {}
