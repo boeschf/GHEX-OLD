@@ -11,12 +11,10 @@
 #ifndef INCLUDED_GHEX_TL_UCX_ADDRESS_HPP
 #define INCLUDED_GHEX_TL_UCX_ADDRESS_HPP
 
-#include <memory>
 #include <cstring>
 #include <iosfwd>
-
+#include <vector>
 #include "./error.hpp"
-
 
 namespace gridtools{
     namespace ghex {
@@ -25,64 +23,47 @@ namespace gridtools{
 
                 struct address
                 {
-                    struct address_array_deleter
-                    {
-                        void operator()(unsigned char* ptr) const
-                        {
-                            delete[] ptr;
-                        }
-                    };
+                    std::vector<unsigned char> m_buffer;
 
-                    std::unique_ptr<unsigned char[], address_array_deleter> m_address_array;
-                    std::size_t m_length;
+                    address() = default;
 
-                    address()
-                    : m_length{0u}
-                    {}
+                    address(std::size_t length) : m_buffer(length) {}
 
-                    address(std::size_t length)
-                    : m_address_array{ new unsigned char[length] }
-                    , m_length{length}
-                    {}
+                    template<typename ForwardIterator>
+                    address(ForwardIterator first, ForwardIterator last)
+                    : m_buffer(first,last) {}
 
-                    address(const ucp_address_t* address_handle, std::size_t address_length)
-                    : m_address_array{ new unsigned char[address_length] }
-                    , m_length{ address_length }
-                    {
-                        std::memcpy( m_address_array.get(), address_handle,  address_length);
-                    }
-
-                    address(const address& other)
-                    : m_address_array{ new unsigned char[other.m_length] }
-                    , m_length{other.m_length}
-                    {
-                        std::memcpy( m_address_array.get(), other.m_address_array.get(),  m_length);
-                    }
-
-                    address& operator=(const address& other)
-                    {
-                        m_address_array.reset( new unsigned char[other.m_length] );
-                        m_length = other.m_length;
-                        std::memcpy( m_address_array.get(), other.m_address_array.get(),  m_length);
-                        return *this;
-                    }
-
+                    address(const address& other) = default;
+                    address& operator=(const address& other) = default;
                     address(address&&) noexcept = default;
                     address& operator=(address&&) noexcept = default;
 
-                    const ucp_address_t* get() const noexcept { return reinterpret_cast<const ucp_address_t*>(m_address_array.get()); }
-                    ucp_address_t*       get()       noexcept { return reinterpret_cast<ucp_address_t*>(m_address_array.get()); }
+                    std::size_t size() const noexcept { return m_buffer.size(); }
+                    
+                    const unsigned char* data() const noexcept { return m_buffer.data(); }
+                          unsigned char* data()       noexcept { return m_buffer.data(); }
 
+                    const ucp_address_t* get() const noexcept { return reinterpret_cast<const ucp_address_t*>(m_buffer.data()); }
+                    ucp_address_t*       get()       noexcept { return reinterpret_cast<ucp_address_t*>(m_buffer.data()); }
+
+                    auto  begin() const noexcept { return m_buffer.begin(); }
+                    auto  begin()       noexcept { return m_buffer.begin(); }
+                    auto cbegin() const noexcept { return m_buffer.cbegin(); }
+
+                    auto  end() const noexcept { return m_buffer.end(); }
+                    auto  end()       noexcept { return m_buffer.end(); }
+                    auto cend() const noexcept { return m_buffer.cend(); }
+
+                    unsigned char  operator[](std::size_t i) const noexcept { return m_buffer[i]; }
+                    unsigned char& operator[](std::size_t i)       noexcept { return m_buffer[i]; }
 
                     template<class CharT, class Traits = std::char_traits<CharT>>
                     friend std::basic_ostream<CharT,Traits>& operator<<(std::basic_ostream<CharT,Traits>& os, const address& addr)
                     {
                         os << "address{";
                         os <<  std::hex;
-                        for (unsigned int i=0; i<addr.m_length; ++i)
-                        {
-                            os << (unsigned int)(addr.m_address_array.get()[i]);
-                        }
+                        for (auto c : addr)
+                            os << (unsigned int)c;
                         os << std::dec << "}";
                         return os;
                     }

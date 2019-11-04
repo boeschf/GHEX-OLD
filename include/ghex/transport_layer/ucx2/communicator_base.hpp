@@ -15,7 +15,7 @@
 #include "./endpoint.hpp"
 #include "./endpoint_info.hpp"
 #include "./request.hpp"
-#include <iostream>
+//#include <iostream>
 
 namespace gridtools {
     namespace ghex {
@@ -56,7 +56,9 @@ namespace gridtools {
                             ucp_ep_create(m_worker, &ep_params, &m_ep.m_ep_h)
                         );
                         m_ep.m_id = ::gridtools::ghex::tl::uuid::generate(c->m_db.rank());
-                        m_address = address{worker_address, address_length};
+                        m_address = address{
+                            reinterpret_cast<unsigned char*>(worker_address),
+                            reinterpret_cast<unsigned char*>(worker_address) + address_length};
                         ucp_worker_release_address(m_worker, worker_address);
                     }
                 

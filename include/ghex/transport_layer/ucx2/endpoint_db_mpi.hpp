@@ -133,13 +133,13 @@ namespace gridtools {
                                 {
                                     for (unsigned int a=0; a<diff.size(); ++a)
                                     {
-                                        const auto& addr = m_local_endpoints[diff[a]];
-                                        size =  addr.m_length;
+                                        /*const*/ auto& addr = m_local_endpoints[diff[a]];
+                                        size =  addr.size();
                                         GHEX_CHECK_MPI_RESULT(
                                             MPI_Bcast(&size, sizeof(std::size_t), MPI_BYTE, r, m_mpi_comm)
                                         );
                                         GHEX_CHECK_MPI_RESULT(
-                                            MPI_Bcast(addr.m_address_array.get(), size, MPI_BYTE, r, m_mpi_comm)
+                                            MPI_Bcast(addr.data(), addr.size(), MPI_BYTE, r, m_mpi_comm)
                                         );
                                     }
                                 }
@@ -169,7 +169,7 @@ namespace gridtools {
                                     );
                                     address addr(size);
                                     GHEX_CHECK_MPI_RESULT(
-                                        MPI_Bcast(addr.m_address_array.get(), size, MPI_BYTE, r, m_mpi_comm)
+                                        MPI_Bcast(addr.data(), size, MPI_BYTE, r, m_mpi_comm)
                                     );
                                     m_global_endpoints[diff[a]] = addr;
                                 }

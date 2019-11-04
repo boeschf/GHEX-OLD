@@ -28,10 +28,10 @@ namespace gridtools {
                     endpoint_info() = default;
 
                     endpoint_info(uuid_type id, const address& addr)
-                    : m_data(sizeof(uuid_type)+addr.m_length)
+                    : m_data(sizeof(uuid_type)+addr.size())
                     {
                         std::memcpy(m_data.data(), &id, sizeof(uuid_type));
-                        std::memcpy(m_data.data()+sizeof(uuid_type), addr.m_address_array.get(), addr.m_length);
+                        std::memcpy(m_data.data()+sizeof(uuid_type), addr.data(), addr.size());
                     }
 
                     endpoint_info(const endpoint_info&) = default;
@@ -44,7 +44,7 @@ namespace gridtools {
                     {
                         addr = address(m_data.size()-sizeof(uuid_type));
                         std::memcpy(&id, m_data.data(), sizeof(uuid_type));
-                        std::memcpy(addr.m_address_array.get(), m_data.data()+sizeof(uuid_type), addr.m_length);
+                        std::memcpy(addr.data(), m_data.data()+sizeof(uuid_type), addr.size());
                     }
 
                     std::size_t size() const noexcept { return m_data.size(); }
