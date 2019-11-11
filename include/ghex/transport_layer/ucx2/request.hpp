@@ -61,6 +61,14 @@ namespace gridtools {
                         else
                             return true;
                     }
+                    
+                    bool test_only()
+                    {
+                        if (m_ptr)
+                            return (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
+                        else
+                            return true;
+                    }
 
                     void progress()
                     {

@@ -15,6 +15,7 @@
 #include "./endpoint.hpp"
 #include "./endpoint_info.hpp"
 #include "./request.hpp"
+#include "./future.hpp"
 //#include <iostream>
 
 namespace gridtools {
@@ -101,7 +102,8 @@ namespace gridtools {
                     static void empty_recv_callback(void *, ucs_status_t, ucp_tag_recv_info_t*) {}
                     
                     template<typename Message>
-                    request send(const Message& msg, endpoint ep)
+                    //request send(const Message& msg, endpoint ep)
+                    future_ref<Message> send(Message& msg, endpoint ep)
                     {
                         // send with tag = uuid
                         ucs_status_ptr_t ret = ucp_tag_send_nb(
@@ -114,11 +116,13 @@ namespace gridtools {
                         if (reinterpret_cast<std::uintptr_t>(ret) == UCS_OK)
                         {
                             // send operation is completed immediately and the call-back function is not invoked
-                            return {};
+                            //return {};
+                            return {msg, {}};
                         } 
                         else if(!UCS_PTR_IS_ERR(ret))
                         {
-                            return {(void*)ret, m_worker};
+                            //return {(void*)ret, m_worker};
+                            return {msg, {(void*)ret, m_worker}};
                         }
                         else
                         {
@@ -128,7 +132,8 @@ namespace gridtools {
                     }
 
                     template<typename Message>
-                    request recv(Message& msg, endpoint ep)
+                    //request recv(Message& msg, endpoint ep)
+                    future_ref<Message> recv(Message& msg, endpoint ep)
                     {
                         // match tag to ep.m_id
                         ucs_status_ptr_t ret = ucp_tag_recv_nb(
@@ -141,7 +146,8 @@ namespace gridtools {
                             &communicator_base::empty_recv_callback);        // callback function pointer: empty here
                         if(!UCS_PTR_IS_ERR(ret))
                         {
-                            return {(void*)ret, m_worker};
+                            //return {(void*)ret, m_worker};
+                            return {msg, {(void*)ret, m_worker}};
                         }
                         else
                         {
@@ -152,7 +158,8 @@ namespace gridtools {
 
                     // receive from anybody
                     template<typename Message>
-                    request recv(Message& msg)
+                    //request recv(Message& msg)
+                    future_ref<Message> recv(Message& msg)
                     {
                         // match tag to ep.m_id
                         ucs_status_ptr_t ret = ucp_tag_recv_nb(
@@ -165,7 +172,8 @@ namespace gridtools {
                             &communicator_base::empty_recv_callback);        // callback function pointer: empty here
                         if(!UCS_PTR_IS_ERR(ret))
                         {
-                            return {(void*)ret, m_worker};
+                            //return {(void*)ret, m_worker};
+                            return {msg, {(void*)ret, m_worker}};
                         }
                         else
                         {

@@ -28,6 +28,7 @@ using context_type = ghex::tl::context<gridtools::ghex::tl::ucx_tag>;
 using comm_type    = ghex::tl::ucx::communicator_base;
 
 
+
 TEST(transport_layer, symmetric_bidirectional_ring)
 {
     int num_threads = 4;
@@ -82,6 +83,7 @@ TEST(transport_layer, symmetric_bidirectional_ring)
         left_eps.push_back(  comms[n].connect(left_neighbors[n]) );
         right_eps.push_back( comms[n].connect(right_neighbors[n]) );
     }
+
 
     auto func = [&](int th_id) {
         // make some message buffers
@@ -278,6 +280,7 @@ TEST(transport_layer, all_to_1)
 
         comms[th_id].send(send_msg, endpoints[th_id-1]).wait();
     };
+
 
     auto recv_func = [&](int th_id) {
         // make some message buffers
