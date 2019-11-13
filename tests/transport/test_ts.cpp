@@ -19,7 +19,7 @@
 #include <gtest/gtest.h>
 
 using comm_t          = gridtools::ghex::tl::communicator<gridtools::ghex::tl::mpi_tag>;
-using callback_comm_t = gridtools::ghex::tl::callback_communicator_ts<comm_t,std::allocator<unsigned char>>;
+using callback_comm_t = gridtools::ghex::tl::callback_communicator_ts<std::allocator<unsigned char>>;
 
 std::atomic<std::size_t> num_completed;
 
@@ -28,11 +28,11 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     num_completed.store(0u);
 
     comm_t comm;
-    callback_comm_t cb_comm(comm); 
+    callback_comm_t cb_comm;
 
-    const int rank = cb_comm.rank();
-    const int r_rank = (rank+1)%cb_comm.size();
-    const int l_rank = (rank+cb_comm.size()-1)%cb_comm.size();
+    const int rank = comm.rank();
+    const int r_rank = (rank+1)%comm.size();
+    const int l_rank = (rank+comm.size()-1)%comm.size();
 
     using msg_type = callback_comm_t::message_type;
 
