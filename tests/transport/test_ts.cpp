@@ -20,6 +20,7 @@
 
 using comm_t          = gridtools::ghex::tl::communicator<gridtools::ghex::tl::mpi_tag>;
 using callback_comm_t = gridtools::ghex::tl::callback_communicator_ts<std::allocator<unsigned char>>;
+using msg_type        = callback_comm_t::message_type;
 
 std::atomic<std::size_t> num_completed;
 
@@ -28,14 +29,14 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
 {
     num_completed.store(0u);
 
+    // use basic communicator to establish neighbors
     comm_t          comm;
-    callback_comm_t cb_comm;
-
-    using msg_type = callback_comm_t::message_type;
-
     const int rank   = comm.rank();
     const int r_rank = (rank+1)%comm.size();
     const int l_rank = (rank+comm.size()-1)%comm.size();
+
+    // shared callback communicator
+    callback_comm_t cb_comm;
 
     // per-thread objects
     std::vector<msg_type> send_msgs;
@@ -48,6 +49,7 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
         comms.push_back(comm_t());
     }
 
+    // total number of sends and receives
     std::size_t num_requests = 2*num_comm_threads;
 
     // lambda which places send and receive calls
