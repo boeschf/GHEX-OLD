@@ -147,52 +147,57 @@ namespace gridtools
                   * @param tag Tag associated with the message
                   * @param cb  Callback function object */
                 template<typename CallBack>
-                request send(message_type msg, rank_type dst, tag_type tag, CallBack&& cb)
+                request send(communicator_type& comm, message_type msg, rank_type dst, tag_type tag, CallBack&& cb)
                 {
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto element_ptr = new send_element_type{std::forward<CallBack>(cb), dst, tag, future_type{}, std::move(msg), req.m_request_state};
-                    element_ptr->m_future = std::move( m_comm.send(element_ptr->m_msg, dst, tag) );
+                    element_ptr->m_future = std::move( comm.send(element_ptr->m_msg, dst, tag) );
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
-
-                /** @brief Send a message without registering a callback. */
-                request send(message_type msg, rank_type dst, tag_type tag)
+                template<typename CallBack>
+                request send(message_type msg, rank_type dst, tag_type tag, CallBack&& cb)
                 {
-                    return send(std::move(msg),dst,tag,[](message_type,rank_type,tag_type){});
+                    return send(m_comm, msg, dst, tag, std::forward<CallBack>(cb));
                 }
 
-                /** @brief Send a message to multiple destinations with the same rank an register an associated callback. 
-                  * @tparam Neighs Range over rank_type
-                  * @tparam CallBack User defined callback class which defines 
-                  *                  void Callback::operator()(rank_type,tag_type,message_type)
-                  * @param msg Message to be sent
-                  * @param neighs Range of destination ranks
-                  * @param tag Tag associated with the message
-                  * @param cb Callback function object */
-                template <typename Neighs, typename CallBack>
-                std::vector<request> send_multi(message_type msg, Neighs const &neighs, int tag, CallBack&& cb)
-                {
-                    GHEX_CHECK_CALLBACK
-                    using cb_type = typename std::remove_cv<typename std::remove_reference<CallBack>::type>::type;
-                    auto cb_ptr = std::make_shared<cb_type>( std::forward<CallBack>(cb) );
-                    std::vector<request> reqs;
-                    for (auto id : neighs)
-                        reqs.push_back( send(msg, id, tag,
-                                [cb_ptr](message_type m, rank_type r, tag_type t)
-                                {
-                                    // if (cb_ptr->use_count == 1)
-                                    (*cb_ptr)(std::move(m),r,t); 
-                                }) );
-                }
+                ///** @brief Send a message without registering a callback. */
+                //request send(message_type msg, rank_type dst, tag_type tag)
+                //{
+                //    return send(std::move(msg),dst,tag,[](message_type,rank_type,tag_type){});
+                //}
 
-                /** @brief Send a message to multiple destinations without registering a callback */
-                template <typename Neighs>
-                std::vector<request> send_multi(message_type msg, Neighs const &neighs, int tag)
-                {
-                    return send_multi(std::move(msg),neighs,tag,[](message_type, rank_type,tag_type){});
-                }
+                ///** @brief Send a message to multiple destinations with the same rank an register an associated callback. 
+                //  * @tparam Neighs Range over rank_type
+                //  * @tparam CallBack User defined callback class which defines 
+                //  *                  void Callback::operator()(rank_type,tag_type,message_type)
+                //  * @param msg Message to be sent
+                //  * @param neighs Range of destination ranks
+                //  * @param tag Tag associated with the message
+                //  * @param cb Callback function object */
+                //template <typename Neighs, typename CallBack>
+                //std::vector<request> send_multi(message_type msg, Neighs const &neighs, int tag, CallBack&& cb)
+                //{
+                //    GHEX_CHECK_CALLBACK
+                //    using cb_type = typename std::remove_cv<typename std::remove_reference<CallBack>::type>::type;
+                //    auto cb_ptr = std::make_shared<cb_type>( std::forward<CallBack>(cb) );
+                //    std::vector<request> reqs;
+                //    for (auto id : neighs)
+                //        reqs.push_back( send(msg, id, tag,
+                //                [cb_ptr](message_type m, rank_type r, tag_type t)
+                //                {
+                //                    // if (cb_ptr->use_count == 1)
+                //                    (*cb_ptr)(std::move(m),r,t); 
+                //                }) );
+                //}
+
+                ///** @brief Send a message to multiple destinations without registering a callback */
+                //template <typename Neighs>
+                //std::vector<request> send_multi(message_type msg, Neighs const &neighs, int tag)
+                //{
+                //    return send_multi(std::move(msg),neighs,tag,[](message_type, rank_type,tag_type){});
+                //}
 
             public: // receive
 
@@ -205,28 +210,33 @@ namespace gridtools
                   * @param tag Tag associated with the message
                   * @param cb  Callback function object */
                 template<typename CallBack>
-                request recv(message_type msg, rank_type src, tag_type tag, CallBack&& cb)
+                request recv(communicator_type& comm, message_type msg, rank_type src, tag_type tag, CallBack&& cb)
                 {
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto element_ptr = new recv_element_type{std::forward<CallBack>(cb), src, tag, future_type{}, std::move(msg), req.m_request_state};
-                    element_ptr->m_future = std::move( m_comm.recv(element_ptr->m_msg, src, tag) );
+                    element_ptr->m_future = std::move( comm.recv(element_ptr->m_msg, src, tag) );
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
                 }
-
-                /** @brief Receive a message with length size (storage is allocated accordingly). */
                 template<typename CallBack>
-                request recv(std::size_t size, rank_type src, tag_type tag, CallBack&& cb)
+                request recv(message_type msg, rank_type src, tag_type tag, CallBack&& cb)
                 {
-                    return recv(message_type{size,m_alloc}, src, tag, std::forward<CallBack>(cb));
+                    return recv(m_comm, msg, src, tag, std::forward<CallBack>(cb));
                 }
 
-                /** @brief Receive a message without registering a callback. */
-                request recv(message_type msg, rank_type src, tag_type tag)
-                {
-                    return recv(std::move(msg),src,tag,[](message_type,rank_type,tag_type){});
-                }
+                ///** @brief Receive a message with length size (storage is allocated accordingly). */
+                //template<typename CallBack>
+                //request recv(std::size_t size, rank_type src, tag_type tag, CallBack&& cb)
+                //{
+                //    return recv(message_type{size,m_alloc}, src, tag, std::forward<CallBack>(cb));
+                //}
+
+                ///** @brief Receive a message without registering a callback. */
+                //request recv(message_type msg, rank_type src, tag_type tag)
+                //{
+                //    return recv(std::move(msg),src,tag,[](message_type,rank_type,tag_type){});
+                //}
 
             public: // progress
 
