@@ -47,6 +47,10 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
         send_msgs.push_back(msg_type(4096));
         recv_msgs.push_back(msg_type(4096));
         comms.push_back(comm_t());
+        send_msgs.back().data<int>()[0] = rank;
+        send_msgs.back().data<int>()[1] = i;
+        recv_msgs.back().data<int>()[0] = -1;
+        recv_msgs.back().data<int>()[1] = -1;
     }
 
     // total number of sends and receives
@@ -114,6 +118,12 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     // wait for completion
     for (auto& t : threads)
         t.join();
+    
+    for (std::size_t i=0; i<num_comm_threads; ++i)
+    {
+        EXPECT_TRUE(recv_msgs[i].data<int>()[0] == l_rank);
+        EXPECT_TRUE(recv_msgs[i].data<int>()[1] == (int)i);
+    }
 
     comm.barrier();
 }
