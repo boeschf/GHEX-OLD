@@ -23,19 +23,21 @@ using callback_comm_t = gridtools::ghex::tl::callback_communicator_ts<std::alloc
 
 std::atomic<std::size_t> num_completed;
 
+// ring-communication using arbitrary number of threads for communication and progressing
 void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool wait)
 {
     num_completed.store(0u);
 
-    comm_t comm;
+    comm_t          comm;
     callback_comm_t cb_comm;
-
-    const int rank = comm.rank();
-    const int r_rank = (rank+1)%comm.size();
-    const int l_rank = (rank+comm.size()-1)%comm.size();
 
     using msg_type = callback_comm_t::message_type;
 
+    const int rank   = comm.rank();
+    const int r_rank = (rank+1)%comm.size();
+    const int l_rank = (rank+comm.size()-1)%comm.size();
+
+    // per-thread objects
     std::vector<msg_type> send_msgs;
     std::vector<msg_type> recv_msgs;
     std::vector<comm_t>   comms;
@@ -55,6 +57,7 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
         cb_comm.recv(c, recv_msg,l_rank,tag,
             [](callback_comm_t::message_type, int r, int t) {
                 std::cout << "received from " << r << " with tag " << t << std::endl; });
+
         cb_comm.send(c, send_msg,r_rank,tag,
             [](callback_comm_t::message_type, int r, int t) {
                 std::cout << "sent to       " << r << " with tag " << t << std::endl; });
@@ -67,6 +70,7 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
         auto recv_req = cb_comm.recv(c, recv_msg,l_rank,tag,
             [](callback_comm_t::message_type, int r, int t) {
                 std::cout << "received from " << r << " with tag " << t << std::endl; });
+
         auto send_req = cb_comm.send(c, send_msg,r_rank,tag,
             [](callback_comm_t::message_type, int r, int t) {
                 std::cout << "sent to       " << r << " with tag " << t << std::endl; });
@@ -78,11 +82,10 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     [&cb_comm, num_requests]()
     {
         while(num_completed < num_requests)
-        {
             num_completed += cb_comm.progress();
-        }
     };
 
+    // make threads
     std::vector<std::thread> threads;
     threads.reserve(num_progress_threads+num_comm_threads);
 
@@ -106,6 +109,7 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
                 recv_msgs[i],
                 send_msgs[i]) );
 
+    // wait for completion
     for (auto& t : threads)
         t.join();
 

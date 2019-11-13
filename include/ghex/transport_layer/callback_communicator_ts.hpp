@@ -30,23 +30,16 @@ namespace gridtools
                 using allocator_type    = Allocator;
                 using message_type      = shared_message_buffer<allocator_type>;
 
-
                 struct request_state
                 {
                     volatile bool m_ready = false;
-                    bool is_ready() const noexcept
-                    {
-                        return m_ready;
-                    }
+                    bool is_ready() const noexcept { return m_ready; }
                 };
 
                 struct request
                 {
                     std::shared_ptr<request_state> m_request_state;
-                    bool is_ready() const noexcept 
-                    {
-                        return m_request_state->is_ready(); 
-                    }
+                    bool is_ready() const noexcept { return m_request_state->is_ready(); }
                 };
 
             private: // member types
@@ -58,6 +51,7 @@ namespace gridtools
                         virtual bool ready() = 0;
                         virtual ~iface() {}
                     };
+
                     template<class Future>
                     struct holder : public iface
                     {
@@ -70,9 +64,7 @@ namespace gridtools
                     std::unique_ptr<iface> m_ptr;
 
                     template<class Future>
-                    any_future(Future&& fut)
-                    : m_ptr{std::make_unique<holder<Future>>(std::move(fut))}
-                    {}
+                    any_future(Future&& fut) : m_ptr{std::make_unique<holder<Future>>(std::move(fut))} {}
 
                     bool ready() { return m_ptr->ready(); }
                 };
@@ -94,7 +86,6 @@ namespace gridtools
                 using send_container_type = boost::lockfree::queue<send_element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
                 using recv_container_type = boost::lockfree::queue<recv_element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
 
-
             private: // members
 
                 allocator_type      m_alloc;
@@ -103,19 +94,15 @@ namespace gridtools
 
             public: // ctors
 
-                /** @brief construct from a basic transport communicator
-                  * @param comm  the underlying transport communicator
-                  * @param alloc the allocator instance to be used for constructing messages */
                 callback_communicator_ts(allocator_type alloc = allocator_type{}) 
                 : m_alloc(alloc), m_sends(128), m_recvs(128) {}
 
                 callback_communicator_ts(const callback_communicator_ts&) = delete;
                 callback_communicator_ts(callback_communicator_ts&&) = default;
 
-                /** terminates the program if the queues are not empty */
                 ~callback_communicator_ts() 
                 { 
-                    // consume all
+                    // TODO: consume all
                 }
 
             public: // send
@@ -166,6 +153,7 @@ namespace gridtools
                         {
                             // call the callback
                             ptr->m_cb(std::move(ptr->m_msg), ptr->m_rank, ptr->m_tag);
+                            // make request ready
                             ptr->m_request_state->m_ready = true;
                             delete ptr;
                             return 1u;
