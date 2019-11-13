@@ -35,18 +35,13 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     const int l_rank = (rank+cb_comm.size()-1)%cb_comm.size();
 
     using msg_type = callback_comm_t::message_type;
-    using req_type = callback_comm_t::request;
 
     std::vector<msg_type> send_msgs;
     std::vector<msg_type> recv_msgs;
-    std::vector<req_type> send_reqs;
-    std::vector<req_type> recv_reqs;
     for (std::size_t i=0; i<num_comm_threads; ++i)
     {
         send_msgs.push_back(msg_type(4096));
         recv_msgs.push_back(msg_type(4096));
-        send_reqs.push_back(req_type());
-        recv_reqs.push_back(req_type());
     }
 
     std::size_t num_requests = 2*num_comm_threads;
@@ -65,12 +60,12 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     
     // lambda which places send and receive calls and waits for completion
     auto send_recv_func_wait =
-    [&cb_comm,l_rank,r_rank](int tag, msg_type recv_msg, msg_type send_msg, req_type recv_req, req_type send_req)
+    [&cb_comm,l_rank,r_rank](int tag, msg_type recv_msg, msg_type send_msg)
     {
-        recv_req = cb_comm.recv(recv_msg,l_rank,tag,
+        auto recv_req = cb_comm.recv(recv_msg,l_rank,tag,
             [](callback_comm_t::message_type, int r, int t) {
                 std::cout << "received from " << r << " with tag " << t << std::endl; });
-        send_req = cb_comm.send(send_msg,r_rank,tag,
+        auto send_req = cb_comm.send(send_msg,r_rank,tag,
             [](callback_comm_t::message_type, int r, int t) {
                 std::cout << "sent to       " << r << " with tag " << t << std::endl; });
         while ( !(recv_req.is_ready() && send_req.is_ready()) ) {}
@@ -98,9 +93,7 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
                 send_recv_func_wait, 
                 (int)i,
                 recv_msgs[i],
-                send_msgs[i],
-                recv_reqs[i],
-                send_reqs[i]) );
+                send_msgs[i]) );
     else
         for (std::size_t i=0; i<num_comm_threads; ++i)
             threads.push_back( std::thread(
