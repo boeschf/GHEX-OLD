@@ -307,12 +307,15 @@ namespace gridtools{
                     cont_detail::shared_message<Message> s_msg{std::move(msg)};
                     std::vector<request> reqs;
                     for (auto id : neighs)
-                        reqs.push_back( send(comm, s_msg, id, tag,
-                                [cb_ptr, s_msg](message_type m, rank_type r, tag_type t)
+                    {
+                        auto s_msg_cpy = s_msg;
+                        reqs.push_back( send(comm, std::move(s_msg_cpy), id, tag,
+                                [cb_ptr](message_type m, rank_type r, tag_type t)
                                 {
                                     // if (cb_ptr->use_count == 1)
                                     (*cb_ptr)(std::move(m),r,t); 
                                 }) );
+                    }
                     return reqs;
                 }
 
