@@ -128,18 +128,24 @@ namespace gridtools{
             } // namespace cont_detail
 
 
-            // user code here:
+            
+            // thread-safe shared communicator which handles callbacks
+            // note: no templates, everything is type-erased
+            // relies on future-based basic communicator which is passed for every send/recv
             class continuation_communicator
             {
             public: // member types
                 
                 using tag_type          = int;
                 using rank_type         = int;
-                using message_type      = cont_detail::any_message;
+                // this is the message type returned in the callback:
+                using message_type      = cont_detail::any_message; 
+                // returned from send/recv to check for completion
                 using request           = cont_detail::request;
 
             private: // member types
 
+                // wrapper for messages passed by l-value reference
                 using ref_message       = cont_detail::ref_message;
 
                 // necessary meta information for each send/receive operation
@@ -153,6 +159,7 @@ namespace gridtools{
                     message_type                                               m_msg;
                     std::shared_ptr<cont_detail::request_state>                m_request_state;
                 };
+                // we need thread-safe queues
                 using lock_free_alloc_t   = boost::lockfree::allocator<std::allocator<unsigned char>>;
                 using send_container_type = boost::lockfree::queue<element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
                 using recv_container_type = boost::lockfree::queue<element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
@@ -171,7 +178,9 @@ namespace gridtools{
                 
             public: // send
 
-                // take ownership of message if it is an r-value reference!
+                // use basic comm to post the send and place the callback in a queue
+                // returns a request to check for completion
+                // takes ownership of message if it is an r-value reference!
                 template<typename Comm, typename Message, typename CallBack>
                 request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb)
                 {
@@ -180,8 +189,7 @@ namespace gridtools{
                     return send(comm, std::forward<Message>(msg), dst, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
                 
-                // take ownership of message if it is an r-value reference!
-                // no callback
+                // no-callback version
                 template<typename Comm, typename Message>
                 request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag)
                 {
@@ -190,7 +198,10 @@ namespace gridtools{
 
             public: // send multi
 
-                // take ownership of message if it is an r-value reference!
+                // use basic comm to post the sends and place the callback in a queue
+                // returns a vector of request to check for completion
+                // takes ownership of message if it is an r-value reference!
+                // internally transforms the callback (and the message if moved in) into shared objects
                 template <typename Comm, typename Message, typename Neighs, typename CallBack>
                 std::vector<request> send_multi(Comm& comm, Message&& msg, const Neighs& neighs, tag_type tag, CallBack&& cb)
                 {
@@ -199,8 +210,7 @@ namespace gridtools{
                     return send_multi(comm, std::forward<Message>(msg), neighs, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
 
-                // take ownership of message if it is an r-value reference!
-                // no callback
+                // no-callback version
                 template <typename Comm, typename Message, typename Neighs>
                 std::vector<request> send_multi(Comm& comm, Message&& msg, const Neighs& neighs, tag_type tag)
                 {
@@ -209,7 +219,9 @@ namespace gridtools{
 
             public: // receive
 
-                // take ownership of message if it is an r-value reference!
+                // use basic comm to post the recv and place the callback in a queue
+                // returns a request to check for completion
+                // takes ownership of message if it is an r-value reference!
                 template<typename Comm, typename Message, typename CallBack>
                 request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb)
                 {
@@ -218,8 +230,7 @@ namespace gridtools{
                     return recv(comm, std::forward<Message>(msg), src, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
 
-                // take ownership of message if it is an r-value reference!
-                // no callback
+                // no-callback version
                 template<typename Comm, typename Message>
                 request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag)
                 {
@@ -228,6 +239,7 @@ namespace gridtools{
 
             public: // progress
 
+                // progress the ques and return the number of progressed callbacks
                 std::size_t progress()
                 {
                     std::size_t num_completed = 0u;
@@ -318,7 +330,6 @@ namespace gridtools{
                     }
                     return reqs;
                 }
-
 
                 template<typename Queue>
                 std::size_t run(Queue& d)
