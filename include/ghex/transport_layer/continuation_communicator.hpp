@@ -14,18 +14,12 @@
 #include <boost/lockfree/queue.hpp>
 #include "./callback_communicator.hpp"
 
-namespace gridtools
-{
-    namespace ghex
-    {
+namespace gridtools{
+    namespace ghex {
         namespace tl {
 
-            class continuation_communicator
-            {
-            public: // member types
-                
-                using tag_type          = int;
-                using rank_type         = int;
+            // implementation details here:
+            namespace cont_detail {
 
                 // shared request state
                 struct request_state
@@ -78,10 +72,6 @@ namespace gridtools
                     std::size_t size() const noexcept { return m_ptr->size(); }
                 };
 
-                using message_type = any_message;
-
-            private: // member types
-                
                 // simple wrapper around an l-value reference message (stores pointer and size)
                 struct ref_message
                 {
@@ -119,16 +109,33 @@ namespace gridtools
                     bool ready() { return m_ptr->ready(); }
                 };
 
+            } // namespace cont_detail
+
+
+            // user code here:
+            class continuation_communicator
+            {
+            public: // member types
+                
+                using tag_type          = int;
+                using rank_type         = int;
+                using message_type      = cont_detail::any_message;
+                using request           = cont_detail::request;
+
+            private: // member types
+
+                using ref_message       = cont_detail::ref_message;
+
                 // necessary meta information for each send/receive operation
                 struct element_type
                 {
                     using message_arg_type = message_type;
                     std::function<void(message_arg_type, rank_type, tag_type)> m_cb;
-                    rank_type    m_rank;
-                    tag_type     m_tag;
-                    any_future   m_future;
-                    message_type m_msg;
-                    std::shared_ptr<request_state> m_request_state;
+                    rank_type                                                  m_rank;
+                    tag_type                                                   m_tag;
+                    cont_detail::any_future                                    m_future;
+                    message_type                                               m_msg;
+                    std::shared_ptr<cont_detail::request_state>                m_request_state;
                 };
                 using lock_free_alloc_t   = boost::lockfree::allocator<std::allocator<unsigned char>>;
                 using send_container_type = boost::lockfree::queue<element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
@@ -141,16 +148,10 @@ namespace gridtools
 
             public: // ctors
 
-                continuation_communicator() 
-                : m_sends(128), m_recvs(128) {}
-
+                continuation_communicator() : m_sends(128), m_recvs(128) {}
                 continuation_communicator(const continuation_communicator&) = delete;
                 continuation_communicator(continuation_communicator&&) = default;
-
-                ~continuation_communicator() 
-                { 
-                    // TODO: consume all
-                }
+                ~continuation_communicator() { /* TODO: consume all*/ }
                 
             public: // send
 
@@ -198,13 +199,14 @@ namespace gridtools
                     return num_completed;
                 }
 
+
             private: // implementation
 
                 template<typename Comm, typename Message, typename CallBack>
                 request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb, std::false_type)
                 {
                     GHEX_CHECK_CALLBACK
-                    request req{std::make_shared<request_state>()};
+                    request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.send(msg,dst,tag);
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
                                                         ref_message{msg.data(),msg.size()}, req.m_request_state};
@@ -216,7 +218,7 @@ namespace gridtools
                 request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb, std::true_type)
                 {
                     GHEX_CHECK_CALLBACK
-                    request req{std::make_shared<request_state>()};
+                    request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.send(msg,dst,tag);
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
                                                         std::move(msg), req.m_request_state};
@@ -228,7 +230,7 @@ namespace gridtools
                 request recv(Comm& comm, Message& msg, rank_type src, tag_type tag, CallBack&& cb, std::false_type)
                 {
                     GHEX_CHECK_CALLBACK
-                    request req{std::make_shared<request_state>()};
+                    request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.recv(msg,src,tag);
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
                                                         ref_message{msg.data(),msg.size()}, req.m_request_state};
@@ -240,7 +242,7 @@ namespace gridtools
                 request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb, std::true_type)
                 {
                     GHEX_CHECK_CALLBACK
-                    request req{std::make_shared<request_state>()};
+                    request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.recv(msg,src,tag);
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
                                                         std::move(msg), req.m_request_state};
