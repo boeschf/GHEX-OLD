@@ -20,7 +20,7 @@
 
 using comm_t          = gridtools::ghex::tl::communicator<gridtools::ghex::tl::mpi_tag>;
 using cont_comm_t     = gridtools::ghex::tl::continuation_communicator<std::allocator<unsigned char>>;
-using msg_type        = cont_comm_t::message_type;
+using msg_type        = gridtools::ghex::tl::message_buffer<>;
 
 std::atomic<std::size_t> num_completed;
 
@@ -58,7 +58,7 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
 
     // lambda which places send and receive calls
     auto send_recv_func_nowait =
-    [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type recv_msg, msg_type send_msg)
+    [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type& recv_msg, msg_type& send_msg)
     {
         cont_comm.recv(c, recv_msg,l_rank,tag,
             [](cont_comm_t::message_type, int r, int t) {
@@ -71,7 +71,7 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     
     // lambda which places send and receive calls and waits for completion
     auto send_recv_func_wait =
-    [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type recv_msg, msg_type send_msg)
+    [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type& recv_msg, msg_type& send_msg)
     {
         auto recv_req = cont_comm.recv(c, recv_msg,l_rank,tag,
             [](cont_comm_t::message_type, int r, int t) {
@@ -104,16 +104,16 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
                 send_recv_func_wait, 
                 std::ref(comms[i]),
                 (int)i,
-                recv_msgs[i],
-                send_msgs[i]) );
+                std::ref(recv_msgs[i]),
+                std::ref(send_msgs[i])) );
     else
         for (std::size_t i=0; i<num_comm_threads; ++i)
             threads.push_back( std::thread(
                 send_recv_func_nowait,
                 std::ref(comms[i]),
                 (int)i,
-                recv_msgs[i],
-                send_msgs[i]) );
+                std::ref(recv_msgs[i]),
+                std::ref(send_msgs[i])) );
 
     // wait for completion
     for (auto& t : threads)

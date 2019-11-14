@@ -28,7 +28,6 @@ namespace gridtools
                 using tag_type          = int;
                 using rank_type         = int;
                 using allocator_type    = Allocator;
-                using message_type      = shared_message_buffer<allocator_type>;
 
                 // shared request state
                 struct request_state
@@ -46,6 +45,18 @@ namespace gridtools
                     bool is_ready() const noexcept { return m_request_state->is_ready(); }
                 };
 
+                struct any_message
+                {
+                    using value_type = unsigned char;
+                    unsigned char* m_data;
+                    std::size_t m_size;
+                    unsigned char* data() noexcept { return m_data; }
+                    const unsigned char* data() const noexcept { return m_data; }
+                    std::size_t size() const noexcept { return m_size; }
+                };
+
+                using message_type = any_message;
+
             private: // member types
 
                 // type-erased future
@@ -58,7 +69,7 @@ namespace gridtools
                     };
 
                     template<class Future>
-                    struct holder : public iface
+                    struct holder final : public iface
                     {
                         Future m_future;
                         holder() = default;
@@ -73,6 +84,7 @@ namespace gridtools
 
                     bool ready() { return m_ptr->ready(); }
                 };
+
 
                 // necessary meta information for each send/receive operation
                 struct element_type
@@ -112,26 +124,38 @@ namespace gridtools
 
             public: // send
 
-                template<typename Comm, typename CallBack>
-                request send(Comm& comm, message_type msg, rank_type dst, tag_type tag, CallBack&& cb)
+                template<typename Comm, typename Message, typename CallBack>
+                request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb)
                 {
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto fut = comm.send(msg,dst,tag);
-                    auto element_ptr = new send_element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), std::move(msg), req.m_request_state};
+                    auto element_ptr = new send_element_type{
+                        std::forward<CallBack>(cb), 
+                        dst, 
+                        tag, 
+                        std::move(fut), 
+                        any_message{msg.data(),msg.size()}, 
+                        req.m_request_state};
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
 
             public: // receive
 
-                template<typename Comm, typename CallBack>
-                request recv(Comm& comm, message_type msg, rank_type src, tag_type tag, CallBack&& cb)
+                template<typename Comm, typename Message, typename CallBack>
+                request recv(Comm& comm, Message& msg, rank_type src, tag_type tag, CallBack&& cb)
                 {
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto fut = comm.recv(msg,src,tag);
-                    auto element_ptr = new recv_element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), std::move(msg), req.m_request_state};
+                    auto element_ptr = new recv_element_type{
+                        std::forward<CallBack>(cb), 
+                        src, 
+                        tag, 
+                        std::move(fut), 
+                        {msg.data(),msg.size()}, 
+                        req.m_request_state};
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
                 }
