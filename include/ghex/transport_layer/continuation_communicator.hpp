@@ -119,7 +119,6 @@ namespace gridtools
                     bool ready() { return m_ptr->ready(); }
                 };
 
-
                 // necessary meta information for each send/receive operation
                 struct element_type
                 {
@@ -131,11 +130,9 @@ namespace gridtools
                     message_type m_msg;
                     std::shared_ptr<request_state> m_request_state;
                 };
-                using send_element_type   = element_type;
-                using recv_element_type   = element_type;
                 using lock_free_alloc_t   = boost::lockfree::allocator<std::allocator<unsigned char>>;
-                using send_container_type = boost::lockfree::queue<send_element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
-                using recv_container_type = boost::lockfree::queue<recv_element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
+                using send_container_type = boost::lockfree::queue<element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
+                using recv_container_type = boost::lockfree::queue<element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
 
             private: // members
 
@@ -164,6 +161,14 @@ namespace gridtools
                     using is_rvalue = std::is_rvalue_reference<decltype(std::forward<Message>(msg))>;
                     return send(comm, std::forward<Message>(msg), dst, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
+                
+                // take ownership of message if it is an r-value reference!
+                // no callback
+                template<typename Comm, typename Message>
+                request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag)
+                {
+                    return send(comm, std::forward<Message>(msg), dst, tag, [](message_type,rank_type,tag_type){});
+                }
 
             public: // receive
 
@@ -173,6 +178,14 @@ namespace gridtools
                 {
                     using is_rvalue = std::is_rvalue_reference<decltype(std::forward<Message>(msg))>;
                     return recv(comm, std::forward<Message>(msg), src, tag, std::forward<CallBack>(cb), is_rvalue());
+                }
+
+                // take ownership of message if it is an r-value reference!
+                // no callback
+                template<typename Comm, typename Message>
+                request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag)
+                {
+                    return recv(comm, std::forward<Message>(msg), src, tag, [](message_type,rank_type,tag_type){});
                 }
 
             public: // progress
@@ -193,8 +206,8 @@ namespace gridtools
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto fut = comm.send(msg,dst,tag);
-                    auto element_ptr = new send_element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
-                                                             ref_message{msg.data(),msg.size()}, req.m_request_state};
+                    auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
+                                                        ref_message{msg.data(),msg.size()}, req.m_request_state};
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
@@ -205,8 +218,8 @@ namespace gridtools
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto fut = comm.send(msg,dst,tag);
-                    auto element_ptr = new send_element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
-                                                             std::move(msg), req.m_request_state};
+                    auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
+                                                        std::move(msg), req.m_request_state};
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
@@ -217,8 +230,8 @@ namespace gridtools
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto fut = comm.recv(msg,src,tag);
-                    auto element_ptr = new recv_element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
-                                                             ref_message{msg.data(),msg.size()}, req.m_request_state};
+                    auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
+                                                        ref_message{msg.data(),msg.size()}, req.m_request_state};
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
                 }
@@ -229,8 +242,8 @@ namespace gridtools
                     GHEX_CHECK_CALLBACK
                     request req{std::make_shared<request_state>()};
                     auto fut = comm.recv(msg,src,tag);
-                    auto element_ptr = new recv_element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
-                                                             std::move(msg), req.m_request_state};
+                    auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
+                                                        std::move(msg), req.m_request_state};
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
                 }
@@ -238,7 +251,7 @@ namespace gridtools
                 template<typename Queue>
                 std::size_t run(Queue& d)
                 {
-                    send_element_type* ptr = nullptr;
+                    element_type* ptr = nullptr;
                     if (d.pop(ptr))
                     {
                         if (ptr->m_future.ready())
