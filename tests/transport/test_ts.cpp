@@ -61,12 +61,16 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type& recv_msg, msg_type& send_msg)
     {
         cont_comm.recv(c, recv_msg,l_rank,tag,
-            [](cont_comm_t::message_type, int r, int t) {
-                std::cout << "received from " << r << " with tag " << t << std::endl; });
+            [](cont_comm_t::message_type m, int r, int t) {
+                std::cout << "received from " << r << " with tag " << t << " and size " << m.size() << std::endl; });
 
-        cont_comm.send(c, send_msg,r_rank,tag,
-            [](cont_comm_t::message_type, int r, int t) {
-                std::cout << "sent to       " << r << " with tag " << t << std::endl; });
+        // give up ownership of some message:
+        msg_type another_msg(4096);
+        another_msg.data<int>()[0] = send_msg.data<int>()[0];
+        another_msg.data<int>()[1] = send_msg.data<int>()[1];
+        cont_comm.send(c, std::move(another_msg),r_rank,tag,
+            [](cont_comm_t::message_type m, int r, int t) {
+                std::cout << "sent to       " << r << " with tag " << t << " and size " << m.size() << std::endl; });
     };
     
     // lambda which places send and receive calls and waits for completion
@@ -74,12 +78,12 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type& recv_msg, msg_type& send_msg)
     {
         auto recv_req = cont_comm.recv(c, recv_msg,l_rank,tag,
-            [](cont_comm_t::message_type, int r, int t) {
-                std::cout << "received from " << r << " with tag " << t << std::endl; });
+            [](cont_comm_t::message_type m, int r, int t) {
+                std::cout << "received from " << r << " with tag " << t << " and size " << m.size() << std::endl; });
 
         auto send_req = cont_comm.send(c, send_msg,r_rank,tag,
-            [](cont_comm_t::message_type, int r, int t) {
-                std::cout << "sent to       " << r << " with tag " << t << std::endl; });
+            [](cont_comm_t::message_type m, int r, int t) {
+                std::cout << "sent to       " << r << " with tag " << t << " and size " << m.size() << std::endl; });
         while ( !(recv_req.is_ready() && send_req.is_ready()) ) {}
     };
 

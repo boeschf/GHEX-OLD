@@ -43,7 +43,45 @@ namespace gridtools
                     bool is_ready() const noexcept { return m_request_state->is_ready(); }
                 };
 
+                // type-erased message
                 struct any_message
+                {
+                    struct iface
+                    {
+                        virtual unsigned char* data() noexcept = 0;
+                        virtual const unsigned char* data() const noexcept = 0;
+                        virtual std::size_t size() const noexcept = 0;
+                        virtual ~iface() {}
+                    };
+
+                    template<class Message>
+                    struct holder final : public iface
+                    {
+                        Message m_message;
+                        holder(Message&& m): m_message{std::move(m)} {}
+
+                        unsigned char* data() noexcept override { return m_message.data(); }
+                        const unsigned char* data() const noexcept override { return m_message.data(); }
+                        std::size_t size() const noexcept override { return m_message.size(); }
+                    };
+
+                    std::unique_ptr<iface> m_ptr;
+
+                    template<class Message>
+                    any_message(Message&& m) : m_ptr{std::make_unique<holder<Message>>(std::move(m))} {}
+                    any_message(any_message&&) = default;
+
+                    unsigned char* data() noexcept { return m_ptr->data(); }
+                    const unsigned char* data() const noexcept { return m_ptr->data(); }
+                    std::size_t size() const noexcept { return m_ptr->size(); }
+                };
+
+                using message_type = any_message;
+
+            private: // member types
+                
+                // simple wrapper around an l-value reference message (stores pointer and size)
+                struct ref_message
                 {
                     using value_type = unsigned char;
                     unsigned char* m_data;
@@ -52,11 +90,7 @@ namespace gridtools
                     const unsigned char* data() const noexcept { return m_data; }
                     std::size_t size() const noexcept { return m_size; }
                 };
-
-                using message_type = any_message;
-
-            private: // member types
-
+                
                 // type-erased future
                 struct any_future
                 {
@@ -118,43 +152,25 @@ namespace gridtools
                 { 
                     // TODO: consume all
                 }
-
+                
             public: // send
 
+                // take ownership of message if it is an r-value reference!
                 template<typename Comm, typename Message, typename CallBack>
-                request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb)
+                request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb)
                 {
-                    GHEX_CHECK_CALLBACK
-                    request req{std::make_shared<request_state>()};
-                    auto fut = comm.send(msg,dst,tag);
-                    auto element_ptr = new send_element_type{
-                        std::forward<CallBack>(cb), 
-                        dst, 
-                        tag, 
-                        std::move(fut), 
-                        {msg.data(),msg.size()}, 
-                        req.m_request_state};
-                    while (!m_sends.push(element_ptr)) {}
-                    return req;
+                    using is_rvalue = std::is_rvalue_reference<decltype(std::forward<Message>(msg))>;
+                    return send(comm, std::forward<Message>(msg), dst, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
 
             public: // receive
 
+                // take ownership of message if it is an r-value reference!
                 template<typename Comm, typename Message, typename CallBack>
-                request recv(Comm& comm, Message& msg, rank_type src, tag_type tag, CallBack&& cb)
+                request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb)
                 {
-                    GHEX_CHECK_CALLBACK
-                    request req{std::make_shared<request_state>()};
-                    auto fut = comm.recv(msg,src,tag);
-                    auto element_ptr = new recv_element_type{
-                        std::forward<CallBack>(cb), 
-                        src, 
-                        tag, 
-                        std::move(fut), 
-                        {msg.data(),msg.size()}, 
-                        req.m_request_state};
-                    while (!m_recvs.push(element_ptr)) {}
-                    return req;
+                    using is_rvalue = std::is_rvalue_reference<decltype(std::forward<Message>(msg))>;
+                    return recv(comm, std::forward<Message>(msg), src, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
 
             public: // progress
@@ -168,6 +184,54 @@ namespace gridtools
                 }
 
             private: // implementation
+
+                template<typename Comm, typename Message, typename CallBack>
+                request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb, std::false_type)
+                {
+                    GHEX_CHECK_CALLBACK
+                    request req{std::make_shared<request_state>()};
+                    auto fut = comm.send(msg,dst,tag);
+                    auto element_ptr = new send_element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
+                                                             ref_message{msg.data(),msg.size()}, req.m_request_state};
+                    while (!m_sends.push(element_ptr)) {}
+                    return req;
+                }
+                
+                template<typename Comm, typename Message, typename CallBack>
+                request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb, std::true_type)
+                {
+                    GHEX_CHECK_CALLBACK
+                    request req{std::make_shared<request_state>()};
+                    auto fut = comm.send(msg,dst,tag);
+                    auto element_ptr = new send_element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
+                                                             std::move(msg), req.m_request_state};
+                    while (!m_sends.push(element_ptr)) {}
+                    return req;
+                }
+
+                template<typename Comm, typename Message, typename CallBack>
+                request recv(Comm& comm, Message& msg, rank_type src, tag_type tag, CallBack&& cb, std::false_type)
+                {
+                    GHEX_CHECK_CALLBACK
+                    request req{std::make_shared<request_state>()};
+                    auto fut = comm.recv(msg,src,tag);
+                    auto element_ptr = new recv_element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
+                                                             ref_message{msg.data(),msg.size()}, req.m_request_state};
+                    while (!m_recvs.push(element_ptr)) {}
+                    return req;
+                }
+
+                template<typename Comm, typename Message, typename CallBack>
+                request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb, std::true_type)
+                {
+                    GHEX_CHECK_CALLBACK
+                    request req{std::make_shared<request_state>()};
+                    auto fut = comm.recv(msg,src,tag);
+                    auto element_ptr = new recv_element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
+                                                             std::move(msg), req.m_request_state};
+                    while (!m_recvs.push(element_ptr)) {}
+                    return req;
+                }
 
                 template<typename Queue>
                 std::size_t run(Queue& d)
