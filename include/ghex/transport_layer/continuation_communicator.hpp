@@ -53,12 +53,13 @@ namespace gridtools{
                     template<class Message>
                     struct holder final : public iface
                     {
+                        using value_type = typename Message::value_type;
                         Message m_message;
                         holder(Message&& m): m_message{std::move(m)} {}
 
-                        unsigned char* data() noexcept override { return m_message.data(); }
-                        const unsigned char* data() const noexcept override { return m_message.data(); }
-                        std::size_t size() const noexcept override { return m_message.size(); }
+                        unsigned char* data() noexcept override { return reinterpret_cast<unsigned char*>(m_message.data()); }
+                        const unsigned char* data() const noexcept override { return reinterpret_cast<const unsigned char*>(m_message.data()); }
+                        std::size_t size() const noexcept override { return sizeof(value_type)*m_message.size(); }
                     };
 
                     std::unique_ptr<iface> m_ptr;
