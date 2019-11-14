@@ -8,8 +8,8 @@
  * SPDX-License-Identifier: BSD-3-Clause
  * 
  */
-#ifndef INCLUDED_GHEX_TL_CALLBACK_COMMUNICATOR_TS_HPP
-#define INCLUDED_GHEX_TL_CALLBACK_COMMUNICATOR_TS_HPP
+#ifndef INCLUDED_GHEX_TL_CONTINUATION_COMMUNICATOR_HPP
+#define INCLUDED_GHEX_TL_CONTINUATION_COMMUNICATOR_HPP
 
 #include <boost/lockfree/queue.hpp>
 #include "./callback_communicator.hpp"
@@ -21,7 +21,7 @@ namespace gridtools
         namespace tl {
 
             template<class Allocator = std::allocator<unsigned char>>
-            class callback_communicator_ts
+            class continuation_communicator
             {
             public: // member types
                 
@@ -30,12 +30,16 @@ namespace gridtools
                 using allocator_type    = Allocator;
                 using message_type      = shared_message_buffer<allocator_type>;
 
+                // shared request state
                 struct request_state
                 {
+                    // volatile is needed to prevent the compiler
+                    // from optimizing away the check of this member
                     volatile bool m_ready = false;
                     bool is_ready() const noexcept { return m_ready; }
                 };
 
+                // simple request class which is returned from send and recv calls
                 struct request
                 {
                     std::shared_ptr<request_state> m_request_state;
@@ -44,6 +48,7 @@ namespace gridtools
 
             private: // member types
 
+                // type-erased future
                 struct any_future
                 {
                     struct iface
@@ -94,13 +99,13 @@ namespace gridtools
 
             public: // ctors
 
-                callback_communicator_ts(allocator_type alloc = allocator_type{}) 
+                continuation_communicator(allocator_type alloc = allocator_type{}) 
                 : m_alloc(alloc), m_sends(128), m_recvs(128) {}
 
-                callback_communicator_ts(const callback_communicator_ts&) = delete;
-                callback_communicator_ts(callback_communicator_ts&&) = default;
+                continuation_communicator(const continuation_communicator&) = delete;
+                continuation_communicator(continuation_communicator&&) = default;
 
-                ~callback_communicator_ts() 
+                ~continuation_communicator() 
                 { 
                     // TODO: consume all
                 }
@@ -172,5 +177,5 @@ namespace gridtools
     } // namespace ghex
 }// namespace gridtools
 
-#endif/*INCLUDED_GHEX_TL_CALLBACK_COMMUNICATOR_TS_HPP */
+#endif/*INCLUDED_GHEX_TL_CONTINUATION_COMMUNICATOR_HPP */
 

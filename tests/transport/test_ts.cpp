@@ -9,7 +9,7 @@
  * 
  */
 #include <iostream>
-#include <ghex/transport_layer/callback_communicator_ts.hpp>
+#include <ghex/transport_layer/continuation_communicator.hpp>
 #include <ghex/transport_layer/mpi/communicator.hpp>
 #include <vector>
 #include <iomanip>
@@ -19,8 +19,8 @@
 #include <gtest/gtest.h>
 
 using comm_t          = gridtools::ghex::tl::communicator<gridtools::ghex::tl::mpi_tag>;
-using callback_comm_t = gridtools::ghex::tl::callback_communicator_ts<std::allocator<unsigned char>>;
-using msg_type        = callback_comm_t::message_type;
+using cont_comm_t     = gridtools::ghex::tl::continuation_communicator<std::allocator<unsigned char>>;
+using msg_type        = cont_comm_t::message_type;
 
 std::atomic<std::size_t> num_completed;
 
@@ -30,13 +30,13 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
     num_completed.store(0u);
 
     // use basic communicator to establish neighbors
-    comm_t          comm;
+    comm_t comm;
     const int rank   = comm.rank();
     const int r_rank = (rank+1)%comm.size();
     const int l_rank = (rank+comm.size()-1)%comm.size();
 
     // shared callback communicator
-    callback_comm_t cb_comm;
+    cont_comm_t cont_comm;
 
     // per-thread objects
     std::vector<msg_type> send_msgs;
@@ -58,37 +58,37 @@ void test1(std::size_t num_progress_threads, std::size_t num_comm_threads, bool 
 
     // lambda which places send and receive calls
     auto send_recv_func_nowait =
-    [&cb_comm,l_rank,r_rank](comm_t& c, int tag, msg_type recv_msg, msg_type send_msg)
+    [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type recv_msg, msg_type send_msg)
     {
-        cb_comm.recv(c, recv_msg,l_rank,tag,
-            [](callback_comm_t::message_type, int r, int t) {
+        cont_comm.recv(c, recv_msg,l_rank,tag,
+            [](cont_comm_t::message_type, int r, int t) {
                 std::cout << "received from " << r << " with tag " << t << std::endl; });
 
-        cb_comm.send(c, send_msg,r_rank,tag,
-            [](callback_comm_t::message_type, int r, int t) {
+        cont_comm.send(c, send_msg,r_rank,tag,
+            [](cont_comm_t::message_type, int r, int t) {
                 std::cout << "sent to       " << r << " with tag " << t << std::endl; });
     };
     
     // lambda which places send and receive calls and waits for completion
     auto send_recv_func_wait =
-    [&cb_comm,l_rank,r_rank](comm_t& c, int tag, msg_type recv_msg, msg_type send_msg)
+    [&cont_comm,l_rank,r_rank](comm_t& c, int tag, msg_type recv_msg, msg_type send_msg)
     {
-        auto recv_req = cb_comm.recv(c, recv_msg,l_rank,tag,
-            [](callback_comm_t::message_type, int r, int t) {
+        auto recv_req = cont_comm.recv(c, recv_msg,l_rank,tag,
+            [](cont_comm_t::message_type, int r, int t) {
                 std::cout << "received from " << r << " with tag " << t << std::endl; });
 
-        auto send_req = cb_comm.send(c, send_msg,r_rank,tag,
-            [](callback_comm_t::message_type, int r, int t) {
+        auto send_req = cont_comm.send(c, send_msg,r_rank,tag,
+            [](cont_comm_t::message_type, int r, int t) {
                 std::cout << "sent to       " << r << " with tag " << t << std::endl; });
         while ( !(recv_req.is_ready() && send_req.is_ready()) ) {}
     };
 
     // lambda which progresses the queues
     auto progress_func =
-    [&cb_comm, num_requests]()
+    [&cont_comm, num_requests]()
     {
         while(num_completed < num_requests)
-            num_completed += cb_comm.progress();
+            num_completed += cont_comm.progress();
     };
 
     // make threads
