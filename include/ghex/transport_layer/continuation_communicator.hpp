@@ -74,16 +74,18 @@ namespace gridtools{
                 };
 
                 // simple wrapper around an l-value reference message (stores pointer and size)
+                template<typename T>
                 struct ref_message
                 {
-                    using value_type = unsigned char;
-                    unsigned char* m_data;
+                    using value_type = T;//unsigned char;
+                    T* m_data;
                     std::size_t m_size;
-                    unsigned char* data() noexcept { return m_data; }
-                    const unsigned char* data() const noexcept { return m_data; }
+                    T* data() noexcept { return m_data; }
+                    const T* data() const noexcept { return m_data; }
                     std::size_t size() const noexcept { return m_size; }
                 };
 
+                // simple shared message which is internally used for send_multi
                 template<typename Message>
                 struct shared_message
                 {
@@ -146,7 +148,8 @@ namespace gridtools{
             private: // member types
 
                 // wrapper for messages passed by l-value reference
-                using ref_message       = cont_detail::ref_message;
+                template<typename T>
+                using ref_message       = cont_detail::ref_message<T>;
 
                 // necessary meta information for each send/receive operation
                 struct element_type
@@ -254,10 +257,11 @@ namespace gridtools{
                 template<typename Comm, typename Message, typename CallBack>
                 request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb, std::false_type)
                 {
+                    using V = typename Message::value_type;
                     request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.send(msg,dst,tag);
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
-                                                        ref_message{msg.data(),msg.size()}, req.m_request_state};
+                                                        ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
@@ -276,10 +280,11 @@ namespace gridtools{
                 template<typename Comm, typename Message, typename CallBack>
                 request recv(Comm& comm, Message& msg, rank_type src, tag_type tag, CallBack&& cb, std::false_type)
                 {
+                    using V = typename Message::value_type;
                     request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.recv(msg,src,tag);
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
-                                                        ref_message{msg.data(),msg.size()}, req.m_request_state};
+                                                        ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
                 }
