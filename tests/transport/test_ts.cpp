@@ -19,7 +19,7 @@
 #include <gtest/gtest.h>
 
 using comm_t          = gridtools::ghex::tl::communicator<gridtools::ghex::tl::mpi_tag>;
-using cont_comm_t     = gridtools::ghex::tl::continuation_communicator<std::allocator<unsigned char>>;
+using cont_comm_t     = gridtools::ghex::tl::continuation_communicator;
 using msg_type        = gridtools::ghex::tl::message_buffer<>;
 
 std::atomic<std::size_t> num_completed;

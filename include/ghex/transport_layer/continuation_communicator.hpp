@@ -20,14 +20,12 @@ namespace gridtools
     {
         namespace tl {
 
-            template<class Allocator = std::allocator<unsigned char>>
             class continuation_communicator
             {
             public: // member types
                 
                 using tag_type          = int;
                 using rank_type         = int;
-                using allocator_type    = Allocator;
 
                 // shared request state
                 struct request_state
@@ -105,14 +103,13 @@ namespace gridtools
 
             private: // members
 
-                allocator_type      m_alloc;
                 send_container_type m_sends;
                 recv_container_type m_recvs;
 
             public: // ctors
 
-                continuation_communicator(allocator_type alloc = allocator_type{}) 
-                : m_alloc(alloc), m_sends(128), m_recvs(128) {}
+                continuation_communicator() 
+                : m_sends(128), m_recvs(128) {}
 
                 continuation_communicator(const continuation_communicator&) = delete;
                 continuation_communicator(continuation_communicator&&) = default;
@@ -135,7 +132,7 @@ namespace gridtools
                         dst, 
                         tag, 
                         std::move(fut), 
-                        any_message{msg.data(),msg.size()}, 
+                        {msg.data(),msg.size()}, 
                         req.m_request_state};
                     while (!m_sends.push(element_ptr)) {}
                     return req;
