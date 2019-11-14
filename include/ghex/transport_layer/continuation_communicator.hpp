@@ -46,6 +46,8 @@ namespace gridtools
                 // type-erased message
                 struct any_message
                 {
+                    using value_type = unsigned char;
+
                     struct iface
                     {
                         virtual unsigned char* data() noexcept = 0;
