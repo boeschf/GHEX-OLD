@@ -72,11 +72,11 @@ foreach (_t ${_benchmarks_mt})
     endif()
 endforeach()
 
-# ucx benchmarks
-set(_ucx_benchmarks ucx_all_to_one_overlap)
-foreach (_t ${_ucx_benchmarks})
-    add_executable(${_t} ${_t}.cpp)
-    target_include_directories(${_t} PRIVATE ${CMAKE_SOURCE_DIR}/include ${GTEST_INCLUDE_DIRS} ${UCP_INCLUDE_DIR})
-    target_link_libraries(${_t} GridTools::gridtools MPI::MPI_CXX gtest_main_bench ${UCP_LIBRARY})
-endforeach()
+## ucx benchmarks
+#set(_ucx_benchmarks ucx_all_to_one_overlap)
+#foreach (_t ${_ucx_benchmarks})
+#    add_executable(${_t} ${_t}.cpp)
+#    target_include_directories(${_t} PRIVATE ${CMAKE_SOURCE_DIR}/include ${GTEST_INCLUDE_DIRS} ${UCP_INCLUDE_DIR})
+#    target_link_libraries(${_t} GridTools::gridtools MPI::MPI_CXX gtest_main_bench ${UCP_LIBRARY})
+#endforeach()
 

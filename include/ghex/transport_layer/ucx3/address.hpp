@@ -13,6 +13,7 @@
 
 #include <cstring>
 #include <iosfwd>
+#include <ios>
 #include <vector>
 #include "./error.hpp"
 
@@ -21,22 +22,22 @@ namespace gridtools{
         namespace tl {
             namespace ucx {
 
-                struct address
+                struct address_t
                 {
                     std::vector<unsigned char> m_buffer;
 
-                    address() = default;
+                    address_t() = default;
 
-                    address(std::size_t length) : m_buffer(length) {}
+                    address_t(std::size_t length) : m_buffer(length) {}
 
                     template<typename ForwardIterator>
-                    address(ForwardIterator first, ForwardIterator last)
+                    address_t(ForwardIterator first, ForwardIterator last)
                     : m_buffer(first,last) {}
 
-                    address(const address& other) = default;
-                    address& operator=(const address& other) = default;
-                    address(address&&) noexcept = default;
-                    address& operator=(address&&) noexcept = default;
+                    address_t(const address_t& other) = default;
+                    address_t& operator=(const address_t& other) = default;
+                    address_t(address_t&&) noexcept = default;
+                    address_t& operator=(address_t&&) noexcept = default;
 
                     std::size_t size() const noexcept { return m_buffer.size(); }
                     
@@ -44,7 +45,6 @@ namespace gridtools{
                           unsigned char* data()       noexcept { return m_buffer.data(); }
 
                     const ucp_address_t* get() const noexcept { return reinterpret_cast<const ucp_address_t*>(m_buffer.data()); }
-                    ucp_address_t*       get()       noexcept { return reinterpret_cast<ucp_address_t*>(m_buffer.data()); }
 
                     auto  begin() const noexcept { return m_buffer.begin(); }
                     auto  begin()       noexcept { return m_buffer.begin(); }
@@ -58,7 +58,7 @@ namespace gridtools{
                     unsigned char& operator[](std::size_t i)       noexcept { return m_buffer[i]; }
 
                     template<class CharT, class Traits = std::char_traits<CharT>>
-                    friend std::basic_ostream<CharT,Traits>& operator<<(std::basic_ostream<CharT,Traits>& os, const address& addr)
+                    friend std::basic_ostream<CharT,Traits>& operator<<(std::basic_ostream<CharT,Traits>& os, const address_t& addr)
                     {
                         os << "address{";
                         os <<  std::hex;

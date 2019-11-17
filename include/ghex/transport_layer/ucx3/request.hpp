@@ -1,7 +1,7 @@
 #ifndef INCLUDED_GHEX_TL_UCX_REQUEST_HPP
 #define INCLUDED_GHEX_TL_UCX_REQUEST_HPP
 
-#include "./error.hpp"
+#include "./worker.hpp"
 
 namespace gridtools {
     namespace ghex {
@@ -10,12 +10,12 @@ namespace gridtools {
 
                 struct request
                 {
-                    void* m_ptr = nullptr;
-                    ucp_worker_h m_worker;
+                    void*     m_ptr = nullptr;
+                    worker_t* m_worker;
 
                     request() noexcept = default;
                     
-                    request(void* ptr, ucp_worker_h worker) noexcept
+                    request(void* ptr, worker_t* worker) noexcept
                     : m_ptr(ptr)
                     , m_worker(worker)
                     {}
@@ -51,6 +51,11 @@ namespace gridtools {
                         while(!test()) {}
                     }
 
+                    bool ready()
+                    {
+                        return test();
+                    }
+
                     bool test()
                     {
                         if (m_ptr)
@@ -72,7 +77,7 @@ namespace gridtools {
 
                     void progress()
                     {
-                        ucp_worker_progress(m_worker);
+                        ucp_worker_progress(m_worker->get());
                     }
                 };
 

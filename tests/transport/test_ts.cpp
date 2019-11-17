@@ -11,6 +11,8 @@
 #include <iostream>
 #include <ghex/transport_layer/continuation_communicator.hpp>
 #include <ghex/transport_layer/mpi/communicator.hpp>
+#include <ghex/transport_layer/ucx3/address_db_mpi.hpp>
+#include <ghex/transport_layer/ucx3/context.hpp>
 #include <vector>
 #include <iomanip>
 #include <atomic>
@@ -18,7 +20,16 @@
 
 #include <gtest/gtest.h>
 
+#define GHEX_TEST_TS_UCX
+
+#ifdef GHEX_TEST_TS_UCX
+using db_t            = gridtools::ghex::tl::ucx::address_db_mpi;
+using context_t       = gridtools::ghex::tl::context<gridtools::ghex::tl::ucx_tag>;
+using comm_t          = typename context_t::communicator_type;
+#else
 using comm_t          = gridtools::ghex::tl::communicator<gridtools::ghex::tl::mpi_tag>;
+#endif
+
 using cont_comm_t     = gridtools::ghex::tl::continuation_communicator;
 using msg_type        = gridtools::ghex::tl::message_buffer<>;
 
@@ -45,8 +56,14 @@ void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, b
 {
     num_completed.store(0u);
 
-    // use basic communicator to establish neighbors
+#ifdef GHEX_TEST_TS_UCX
+    context_t context{ db_t{MPI_COMM_WORLD} };
+    comm_t comm = context.make_communicator();
+#else
     comm_t comm;
+#endif
+
+    // use basic communicator to establish neighbors
     const int rank   = comm.rank();
     const int r_rank = (rank+1)%comm.size();
     const int l_rank = (rank+comm.size()-1)%comm.size();
@@ -62,7 +79,11 @@ void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, b
     {
         send_msgs.push_back(msg_type(4096));
         recv_msgs.push_back(msg_type(4096));
+#ifdef GHEX_TEST_TS_UCX
+        comms.push_back(context.make_communicator());
+#else
         comms.push_back(comm_t());
+#endif
         send_msgs.back().data<int>()[0] = rank;
         send_msgs.back().data<int>()[1] = i;
         recv_msgs.back().data<int>()[0] = -1;
@@ -146,7 +167,7 @@ void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, b
         EXPECT_TRUE(recv_msgs[i].data<int>()[1] == (int)i);
     }
 
-    comm.barrier();
+    //comm.barrier();
 }
 
 
@@ -173,8 +194,12 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
 {
     num_completed.store(0u);
 
-    // use basic communicator to establish neighbors
+#ifdef GHEX_TEST_TS_UCX
+    context_t context{ db_t{MPI_COMM_WORLD} };
+    comm_t comm = context.make_communicator();
+#else
     comm_t comm;
+#endif
 
     // shared callback communicator
     cont_comm_t cont_comm;
@@ -184,7 +209,11 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
     std::vector<int> num_reps; // used for counting in the first nowait send callback
     for (std::size_t i=0; i<num_comm_threads; ++i)
     {
+#ifdef GHEX_TEST_TS_UCX
+        comms.push_back(context.make_communicator());
+#else
         comms.push_back(comm_t());
+#endif
         num_reps.push_back(0);
     }
     
@@ -381,7 +410,7 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
 
     }
 
-    comm.barrier();
+    //comm.barrier();
 }
 
 
