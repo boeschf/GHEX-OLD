@@ -30,8 +30,10 @@ namespace gridtools {
             public: // member types
 
                 using rank_type = typename ucx::worker_t::rank_type;
-                using tag_type  = int;
+                using tag_type  = typename ucx::worker_t::tag_type;
                 using request   = ucx::request;
+                using future    = request;
+                //using future    = ucx::request2;
 
             private: // members
 
@@ -78,7 +80,7 @@ namespace gridtools {
                     } 
                     else if(!UCS_PTR_IS_ERR(ret))
                     {
-                        return {(void*)ret, m_send_worker};
+                        return {(void*)ret, m_send_worker, m_recv_worker};
                     }
                     else
                     {
@@ -103,7 +105,7 @@ namespace gridtools {
                         &communicator::empty_recv_callback);             // callback function pointer: empty here
                     if(!UCS_PTR_IS_ERR(ret))
                     {
-                        return {(void*)ret, m_recv_worker};
+                        return {(void*)ret, m_recv_worker, m_send_worker};
                     }
                     else
                     {
@@ -111,6 +113,19 @@ namespace gridtools {
                         throw std::runtime_error("ghex: ucx error - recv operation failed");
                     }
                 }
+                
+                /* Trial with queued sends
+                template<typename Message>
+                ucx::request2 send2(Message& msg, rank_type dst, tag_type tag)
+                {
+                    return {m_send_worker->send(msg,dst,tag)};
+                }
+
+                template<typename Message>
+                ucx::request2 recv2(Message& msg, rank_type src, tag_type tag)
+                {
+                    return {m_recv_worker->recv(msg,src,tag)};
+                }*/
 
             };
 
