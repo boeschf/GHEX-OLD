@@ -34,8 +34,10 @@ using future_t    = typename comm_t::future;
 
 #include <ghex/transport_layer/continuation_communicator.hpp>
 #include <ghex/transport_layer/message_buffer.hpp>
-using cont_comm_t = gridtools::ghex::tl::continuation_communicator;
-using msg_t       = gridtools::ghex::tl::message_buffer<>;
+using cont_comm_t   = gridtools::ghex::tl::continuation_communicator;
+using cont_msg_t    = typename cont_comm_t::message_type;
+using cont_future_t = typename cont_comm_t::request;
+using msg_t         = gridtools::ghex::tl::message_buffer<>;
 
 
 std::atomic<int> sent(0);
@@ -103,11 +105,16 @@ int main(int argc, char *argv[])
         cont_comm_t cont_comm;
 
         // per-thread objects
+        std::vector<comm_t>   comms;
         std::vector<std::vector<msg_t>> send_msgs(num_threads);
         std::vector<std::vector<msg_t>> recv_msgs(num_threads);
-        std::vector<std::vector<future_t>> send_reqs(num_threads);
-        std::vector<std::vector<future_t>> recv_reqs(num_threads);
-        std::vector<comm_t>   comms;
+        //std::vector<int> comm_cnt(num_threads, 0);
+        //std::vector<int> nlsend_cnt(num_threads, 0);
+        //std::vector<int> nlrecv_cnt(num_threads, 0);
+        //std::vector<int> submit_cnt(num_threads, 0);
+        //std::vector<int> submit_recv_cnt(num_threads, 0);
+        std::vector<std::vector<cont_future_t>> send_reqs(num_threads);
+        std::vector<std::vector<cont_future_t>> recv_reqs(num_threads);
         for (int i=0; i<num_threads; ++i)
         {
 #ifndef USE_MPI
@@ -122,8 +129,8 @@ int main(int argc, char *argv[])
                 recv_msgs[i].push_back(msg_t(buff_size));
                 send_msgs[i].back().data<char>()[0] = 0;
                 recv_msgs[i].back().data<char>()[0] = 0;
-                send_reqs[i].push_back(future_t());
-                recv_reqs[i].push_back(future_t());
+                send_reqs[i].push_back(cont_future_t());
+                recv_reqs[i].push_back(cont_future_t());
             }
         }
 
@@ -136,50 +143,86 @@ int main(int argc, char *argv[])
             int dbg = 0, sdbg = 0, rdbg = 0;
             while (sent < niter || received < niter)
             {
+                if (rank==0 && thread_id==0 && sdbg>=(niter/10))
+                {
+                    std::cout << sent << " sent\n";
+                    sdbg = 0;
+                }
+
+                if (rank==0 && thread_id==0 && rdbg>=(niter/10))
+                {
+                    std::cout << received << " received\n";
+                    rdbg = 0;
+                }
+                
+                if(thread_id == 0 && dbg >= (niter/10))
+                {
+                    dbg = 0;
+                    const double bytes = ((received-last_received + sent-last_sent)*size*buff_size)/2;
+                    std::cout << rank << " total bwdt MB/s:      " << bytes/timer.toc() << "\n";
+                    timer.tic();
+                    last_received = received;
+                    last_sent = sent;
+                }
+                
                 for(int j=0; j<inflight; j++)
                 {
-
-                    if (rank==0 && thread_id==0 && sdbg>=(niter/10))
+                    if(recv_reqs[thread_id][j].is_ready())
                     {
-                        std::cout << sent << " sent\n";
-                        sdbg = 0;
-                    }
-
-                    if (rank==0 && thread_id==0 && rdbg>=(niter/10))
-                    {
-                        std::cout << received << " received\n";
-                        rdbg = 0;
-                    }
-                    
-                    if(thread_id == 0 && dbg >= (niter/10))
-                    {
-                        dbg = 0;
-                        const double bytes = ((received-last_received + sent-last_sent)*size*buff_size)/2;
-                        std::cout << rank << " total bwdt MB/s:      " << bytes/timer.toc() << "\n";
-                        timer.tic();
-                        last_received = received;
-                        last_sent = sent;
-                    }
-                    
-                    if(recv_reqs[thread_id][j].ready())
-                    {
-                        ++received;
+                        //submit_recv_cnt[thread_id] += num_threads;
                         rdbg += num_threads;
                         dbg  += num_threads;
-                        recv_reqs[thread_id][j] = comms[thread_id].recv(recv_msgs[thread_id][j], peer_rank, thread_id*inflight + j);
-                    }
 
-                    if(sent < niter && send_reqs[thread_id][j].ready())
+                        recv_reqs[thread_id][j] = cont_comm.recv(
+                            comms[thread_id],
+                            recv_msgs[thread_id][j], peer_rank, thread_id*inflight+j,
+                            [](cont_msg_t, int, int)
+                            {
+                                ++received;
+                            });
+                    }
+                    else cont_comm.progress();
+
+                    if(sent < niter && send_reqs[thread_id][j].is_ready())
                     {
-                        ++sent;
+                        //submit_cnt[thread_id] += num_threads;
                         sdbg += num_threads;
                         dbg  += num_threads;
-                        send_reqs[thread_id][j] = comms[thread_id].send(send_msgs[thread_id][j], peer_rank, thread_id*inflight + j);
+
+                        send_reqs[thread_id][j] = cont_comm.send(
+                            comms[thread_id],
+                            send_msgs[thread_id][j], peer_rank, thread_id*inflight+j,
+                            [](cont_msg_t, int, int)
+                            {
+                                ++sent;
+                            });
                     }
+                    else cont_comm.progress();
                 }
             }
+
+
+    /*while(sent < niter || received < niter){
+
+	    for(int j=0; j<inflight; j++){
+		if(rmsgs[j].use_count() == 1){
+		    submit_recv_cnt += nthr;
+		    rdbg += nthr;
+		    dbg += nthr;
+		    comm.recv(rmsgs[j], peer_rank, thrid*inflight+j, recv_callback);
+		} else comm.progress();
+
+		if(sent < niter && smsgs[j].use_count() == 1){
+		    submit_cnt += nthr;
+		    sdbg += nthr;
+		    dbg += nthr;
+		    comm.send(smsgs[j], peer_rank, thrid*inflight+j, send_callback);
+		} else comm.progress();
+	    }
+	}i*/
+
         }
-        
+
         if(rank == 1)
         {
             const double bytes = niter*size*buff_size;

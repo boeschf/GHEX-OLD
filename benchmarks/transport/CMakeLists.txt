@@ -1,5 +1,5 @@
 
-set(_benchmarks_mt ghex_p2p_bi_ft_avail_mt_ucx3)
+set(_benchmarks_mt ghex_p2p_bi_ft_avail_mt_ucx3 ghex_p2p_bi_cb_avail_mt_ucx3)
 
 foreach(t_ ${_benchmarks_mt})
 

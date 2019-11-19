@@ -47,17 +47,13 @@ namespace gridtools {
             }
 
             /** @brief stop timings */
-            inline void toc() noexcept
+            inline double toc() noexcept
             {
-                this->operator()( std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now() - m_time_point).count() );
+                const auto delta = std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now() - m_time_point).count();
+                this->operator()( delta );
+                return delta;
             }
             
-            /** @brief stop timings */
-            inline double vtoc() noexcept
-            {
-                return ( std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now() - m_time_point).count() );
-            }
-
             /** @brief stop and start another timing period */
             inline void toc_tic() noexcept
             {

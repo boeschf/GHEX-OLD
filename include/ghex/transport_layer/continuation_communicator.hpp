@@ -34,7 +34,7 @@ namespace gridtools{
                 struct request
                 {
                     std::shared_ptr<request_state> m_request_state;
-                    bool is_ready() const noexcept { return m_request_state->is_ready(); }
+                    bool is_ready() const noexcept { return m_request_state ? m_request_state->is_ready() : true; }
                 };
 
                 // type-erased message

@@ -192,7 +192,7 @@ namespace gridtools {
                         ucp_worker_progress(send_worker->get());
                     }
 
-                    void progress_all()
+                    /*void progress_all()
                     {
                         if (++m_progress_count % 3 == 0)
                         {
@@ -200,7 +200,7 @@ namespace gridtools {
                             for (auto& w : m_workers)
                                 ucp_worker_progress(w->get());
                         }
-                    }
+                    }*/
                 };
 
                 // worker implementation
@@ -251,6 +251,8 @@ namespace gridtools {
                     //std::cout << "progressing worker with index " << m_index << std::endl;
                     if (m_index > 0)
                     {
+                        ucp_worker_progress(get());
+                        ucp_worker_progress(get());
                         ucp_worker_progress(get());
                         m_context->progress_recv_worker();
                     }
