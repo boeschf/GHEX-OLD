@@ -160,10 +160,12 @@ int main(int argc, char *argv[])
                         last_received = received;
                         last_sent = sent;
                     }
+
                     
                     if(recv_reqs[thread_id][j].ready())
                     {
                         ++received;
+                        //++received_i;
                         rdbg += num_threads;
                         dbg  += num_threads;
                         recv_reqs[thread_id][j] = comms[thread_id].recv(recv_msgs[thread_id][j], peer_rank, thread_id*inflight + j);
@@ -172,6 +174,7 @@ int main(int argc, char *argv[])
                     if(sent < niter && send_reqs[thread_id][j].ready())
                     {
                         ++sent;
+                        //++sent_i;
                         sdbg += num_threads;
                         dbg  += num_threads;
                         send_reqs[thread_id][j] = comms[thread_id].send(send_msgs[thread_id][j], peer_rank, thread_id*inflight + j);

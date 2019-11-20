@@ -14,6 +14,8 @@
 #include <boost/lockfree/queue.hpp>
 #include "./callback_communicator.hpp"
 
+#define GHEX_CONT_USE_MEM_POOL
+
 namespace gridtools{
     namespace ghex {
         namespace tl {
@@ -34,7 +36,7 @@ namespace gridtools{
                 struct request
                 {
                     std::shared_ptr<request_state> m_request_state;
-                    bool is_ready() const noexcept { return m_request_state ? m_request_state->is_ready() : true; }
+                    bool ready() const noexcept { return m_request_state ? m_request_state->is_ready() : true; }
                 };
 
                 // type-erased message
@@ -107,6 +109,8 @@ namespace gridtools{
                     struct iface
                     {
                         virtual bool ready() = 0;
+                        virtual bool test_only() = 0;
+                        virtual void progress_only() = 0;
                         virtual ~iface() {}
                     };
 
@@ -117,6 +121,8 @@ namespace gridtools{
                         holder() = default;
                         holder(Future&& fut): m_future{std::move(fut)} {}
                         bool ready() override { return m_future.ready(); }
+                        bool test_only() override { return m_future.test_only(); }
+                        void progress_only() override { m_future.progress_only(); }
                     };
 
                     std::unique_ptr<iface> m_ptr;
@@ -125,7 +131,64 @@ namespace gridtools{
                     any_future(Future&& fut) : m_ptr{std::make_unique<holder<Future>>(std::move(fut))} {}
 
                     bool ready() { return m_ptr->ready(); }
+                    bool test_only() { return m_ptr->test_only(); }
+                    void progress_only() { m_ptr->progress_only(); }
                 };
+
+
+                struct memory_pool
+                {
+                    using lock_free_alloc_t = boost::lockfree::allocator<std::allocator<unsigned char>>;
+                    using queue_type        = boost::lockfree::queue<void*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
+
+                    std::size_t m_chunk_size;
+                    std::size_t m_capacity;
+                    queue_type m_queue;
+                    queue_type m_chunk_queue;
+
+                    memory_pool(std::size_t chunk_size, std::size_t capacity)
+                    : m_chunk_size(chunk_size)
+                    , m_capacity(capacity)
+                    , m_queue(2)
+                    , m_chunk_queue(capacity)
+                    {
+                        replenish();
+                    }
+
+                    ~memory_pool()
+                    {
+                        m_queue.consume_all( [](void* ptr) { std::free(ptr); } );
+                    }
+
+                    void replenish()
+                    {
+                        auto ptr = reinterpret_cast<unsigned char*>(std::malloc(m_capacity*m_chunk_size));
+                        ptr[0] = 8;
+                        while (!m_queue.push(ptr)) {}
+                        for (std::size_t i=0; i<m_capacity; ++i)
+                        {
+                            while (!m_chunk_queue.push( (void*)(ptr+i*m_chunk_size) )) {}
+                        }
+                    }
+
+                    void* alloc()
+                    {
+                        void* ptr;
+                        while ( !m_chunk_queue.pop(ptr) ) 
+                        {
+                            if (m_chunk_queue.empty()) 
+                                replenish();
+                        }
+                        return ptr;
+                    }
+
+                    void free(void* ptr)
+                    {
+                        while (!m_chunk_queue.push(ptr)) {}
+                    }
+
+                };
+
 
             } // namespace cont_detail
 
@@ -167,17 +230,36 @@ namespace gridtools{
                 using send_container_type = boost::lockfree::queue<element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
                 using recv_container_type = boost::lockfree::queue<element_type*, lock_free_alloc_t, boost::lockfree::fixed_sized<false>>;
 
+
             private: // members
 
+                cont_detail::memory_pool m_element_mem_pool;
                 send_container_type m_sends;
                 recv_container_type m_recvs;
 
             public: // ctors
 
-                continuation_communicator() : m_sends(128), m_recvs(128) {}
+                continuation_communicator() 
+                : m_element_mem_pool(sizeof(element_type), 512)
+                , m_sends(512)
+                , m_recvs(512) 
+                {}
+
                 continuation_communicator(const continuation_communicator&) = delete;
                 continuation_communicator(continuation_communicator&&) = default;
-                ~continuation_communicator() { /* TODO: consume all*/ }
+                ~continuation_communicator() 
+                { 
+                        progress();
+                        progress();
+                        progress();
+                    /* TODO: consume all*/
+                    /*while (true)
+                    {
+                        progress();
+                        if (m_sends.empty() && m_recvs.empty())
+                            break;
+                    }*/
+                }
                 
             public: // send
 
@@ -254,14 +336,27 @@ namespace gridtools{
 
             private: // implementation
 
+
                 template<typename Comm, typename Message, typename CallBack>
                 request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb, std::false_type)
                 {
                     using V = typename Message::value_type;
                     request req{std::make_shared<cont_detail::request_state>()};
-                    auto fut = comm.send(msg,dst,tag);
+                    auto fut = comm.send_ts(msg,dst,tag);
+                    if (fut.test_only())
+                    {
+                        cb(message_type{ref_message<V>{msg.data(),msg.size()}}, dst, tag);
+                        req.m_request_state->m_ready = true;
+                        return req;
+                    }
+#ifndef GHEX_CONT_USE_MEM_POOL
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
                                                         ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
+#else
+                    auto element_ptr = new(m_element_mem_pool.alloc()) 
+                        element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
+                                     ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
+#endif
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
@@ -270,9 +365,21 @@ namespace gridtools{
                 request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb, std::true_type)
                 {
                     request req{std::make_shared<cont_detail::request_state>()};
-                    auto fut = comm.send(msg,dst,tag);
+                    auto fut = comm.send_ts(msg,dst,tag);
+                    if (fut.test_only())
+                    {
+                        cb(message_type{std::move(msg)}, dst, tag);
+                        req.m_request_state->m_ready = true;
+                        return req;
+                    }
+#ifndef GHEX_CONT_USE_MEM_POOL
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
                                                         std::move(msg), req.m_request_state};
+#else
+                    auto element_ptr = new(m_element_mem_pool.alloc()) 
+                        element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
+                                     std::move(msg), req.m_request_state};
+#endif
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
@@ -282,9 +389,21 @@ namespace gridtools{
                 {
                     using V = typename Message::value_type;
                     request req{std::make_shared<cont_detail::request_state>()};
-                    auto fut = comm.recv(msg,src,tag);
+                    auto fut = comm.recv_ts(msg,src,tag);
+                    if (fut.test_only())
+                    {
+                        cb(message_type{ref_message<V>{msg.data(),msg.size()}}, src, tag);
+                        req.m_request_state->m_ready = true;
+                        return req;
+                    }
+#ifndef GHEX_CONT_USE_MEM_POOL
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
                                                         ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
+#else
+                    auto element_ptr = new(m_element_mem_pool.alloc()) 
+                        element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
+                                     ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
+#endif
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
                 }
@@ -293,9 +412,21 @@ namespace gridtools{
                 request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb, std::true_type)
                 {
                     request req{std::make_shared<cont_detail::request_state>()};
-                    auto fut = comm.recv(msg,src,tag);
+                    auto fut = comm.recv_ts(msg,src,tag);
+                    if (fut.test_only())
+                    {
+                        cb(message_type{std::move(msg)}, src, tag);
+                        req.m_request_state->m_ready = true;
+                        return req;
+                    }
+#ifndef GHEX_CONT_USE_MEM_POOL
                     auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
                                                         std::move(msg), req.m_request_state};
+#else
+                    auto element_ptr = new(m_element_mem_pool.alloc()) 
+                        element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
+                                     std::move(msg), req.m_request_state};
+#endif
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
                 }
@@ -342,13 +473,23 @@ namespace gridtools{
                     element_type* ptr = nullptr;
                     if (d.pop(ptr))
                     {
-                        if (ptr->m_future.ready())
+                        if (!ptr->m_future.test_only())
+                        {
+                            ptr->m_future.progress_only();
+                        }
+                        if (ptr->m_future.test_only())
+                        //if (ptr->m_future.ready())
                         {
                             // call the callback
                             ptr->m_cb(std::move(ptr->m_msg), ptr->m_rank, ptr->m_tag);
                             // make request ready
                             ptr->m_request_state->m_ready = true;
+#ifndef GHEX_CONT_USE_MEM_POOL
                             delete ptr;
+#else
+                            ptr->~element_type();
+                            m_element_mem_pool.free(ptr);
+#endif
                             return 1u;
                         }
                         else

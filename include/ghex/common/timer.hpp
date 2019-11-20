@@ -49,16 +49,22 @@ namespace gridtools {
             /** @brief stop timings */
             inline double toc() noexcept
             {
-                const auto delta = std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now() - m_time_point).count();
+                const auto delta = vtoc();
                 this->operator()( delta );
                 return delta;
             }
+
+            inline double vtoc() noexcept
+            {
+                return std::chrono::duration_cast<std::chrono::microseconds>(clock_type::now() - m_time_point).count();
+            }
             
             /** @brief stop and start another timing period */
-            inline void toc_tic() noexcept
+            inline double toc_tic() noexcept
             {
-                toc();
+                const auto delta = toc();
                 tic();
+                return delta;
             }
         };
 

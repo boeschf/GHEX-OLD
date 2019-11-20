@@ -122,7 +122,7 @@ void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, b
         auto send_req = cont_comm.send(c, send_msg,r_rank,tag,
             [](cont_comm_t::message_type m, int r, int t) {
                 std::cout << "sent to       " << r << " with tag " << t << " and size " << m.size() << std::endl; });
-        while ( !(recv_req.is_ready() && send_req.is_ready()) ) {}
+        while ( !(recv_req.ready() && send_req.ready()) ) {}
     };
 
     // lambda which progresses the queues
@@ -259,7 +259,7 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
             {
                 bool f = true;
                 for (auto& r : reqs)
-                    f = f && r.is_ready();
+                    f = f && r.ready();
                 finished = f;
             }
             std::cout << "reposting" << std::endl;
@@ -276,7 +276,7 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
             {
                 bool f = true;
                 for (auto& r : reqs)
-                    f = f && r.is_ready();
+                    f = f && r.ready();
                 finished = f;
             }
         };
@@ -348,7 +348,7 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
                     EXPECT_TRUE(reinterpret_cast<int*>(m.data())[0] == t);
                 });
             // wait on the request
-            while (!req.is_ready()){}
+            while (!req.ready()){}
             msg.data<int>()[0] = -1;
             req = cont_comm.recv(c, msg, 0, tag+num_comm_threads,
                 [num_comm_threads](cont_comm_t::message_type m, int, int t) 
@@ -358,7 +358,7 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
             // wait until the requests is ready
             // this is important since otherwise the message will go out of scope and is destroyed
             // and that would lead to corruption since we passed the message as l-value reference
-            while (!req.is_ready()){}
+            while (!req.ready()){}
         };
 
         // nowait mode

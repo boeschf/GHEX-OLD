@@ -100,6 +100,7 @@ namespace gridtools {
                     std::size_t               m_req_size;
                     worker_t                  m_worker;
                     worker_vector             m_workers;
+                    worker_vector             m_workers_ts;
                     std::atomic<std::size_t>  m_recv_progress_count;
                     std::atomic<std::size_t>  m_send_progress_count;
                     std::atomic<std::size_t>  m_progress_count;
@@ -159,7 +160,7 @@ namespace gridtools {
                         if (attr.thread_mode != UCS_THREAD_MODE_MULTI)
                             throw std::runtime_error("ucx cannot be used with multi-threaded context");
 
-                        m_worker = worker_t(this, 0u);
+                        m_worker = worker_t(this, 0u, true);
                         m_db.init(m_worker.address());
                     }
                     
@@ -176,21 +177,22 @@ namespace gridtools {
                     communicator_type make_communicator()
                     {
                         const std::size_t index = m_workers.size()+1u;
-                        m_workers.push_back(std::make_unique<worker_t>(this,index,true));
-                        return {m_workers.back().get(), &m_worker}; 
+                        m_workers.push_back(std::make_unique<worker_t>(this,index,false));
+                        m_workers_ts.push_back(std::make_unique<worker_t>(this,index,true));
+                        return {m_workers.back().get(), m_workers_ts.back().get(), &m_worker}; 
                     }
                         
-                    void progress_recv_worker()
+                    /*void progress_recv_worker()
                     {
-                        if (++m_recv_progress_count % 5 == 0)
+                        //if (++m_recv_progress_count % 5 == 0)
                         ucp_worker_progress(m_worker.get());
-                    }
+                    }*/
 
-                    void progress_send_worker(worker_t* send_worker)
+                    /*void progress_send_worker(worker_t* send_worker)
                     {
-                        if (++m_send_progress_count % 20 == 0)
+                        //if (++m_send_progress_count % 20 == 0)
                         ucp_worker_progress(send_worker->get());
-                    }
+                    }*/
 
                     /*void progress_all()
                     {
@@ -203,19 +205,23 @@ namespace gridtools {
                     }*/
                 };
 
+
                 // worker implementation
 
                 worker_t::worker_t(context_t* context, std::size_t index, bool shared)
                 : m_context(context)
                 , m_index(index)
+                , m_shared(shared)
                 , m_rank(context->rank())
                 , m_size(context->size())
+                //, m_lock(std::make_unique<atomic_lock>())
                 {
                     ucp_worker_params_t params;
                     params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
                     if (shared)
                         params.thread_mode = UCS_THREAD_MODE_MULTI;
                     else
+                        //params.thread_mode = UCS_THREAD_MODE_SERIALIZED;
                         params.thread_mode = UCS_THREAD_MODE_SINGLE;
                     GHEX_CHECK_UCX_RESULT(
                         ucp_worker_create (context->get(), &params, &m_worker.get())
@@ -243,24 +249,6 @@ namespace gridtools {
                     }
                     else
                         throw std::runtime_error("could not connect to endpoint");
-                }
-
-                void worker_t::progress(worker_t* other_worker)
-                {
-                    //m_context->progress_all();
-                    //std::cout << "progressing worker with index " << m_index << std::endl;
-                    if (m_index > 0)
-                    {
-                        ucp_worker_progress(get());
-                        ucp_worker_progress(get());
-                        ucp_worker_progress(get());
-                        m_context->progress_recv_worker();
-                    }
-                    else
-                    {
-                        m_context->progress_send_worker(other_worker);
-                        ucp_worker_progress(get());
-                    }
                 }
 
             } // namespace ucx

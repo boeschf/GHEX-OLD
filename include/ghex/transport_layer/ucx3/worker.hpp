@@ -13,14 +13,52 @@
 
 #include <map>
 #include <deque>
+#include <atomic>
+//#include <mutex>
+		
 #include "./error.hpp"
 #include "./endpoint.hpp"
 #include "./request_state.hpp"
+#include <iostream>
 
 namespace gridtools {
     namespace ghex {
         namespace tl {
             namespace ucx {
+
+                struct atomic_lock
+                {
+                    volatile std::atomic<bool> m_locked;
+                    //std::mutex m_locked;
+                    //atomic_lock() = default; 
+                    atomic_lock() : m_locked(false) {}
+                    /*atomic_lock(atomic_lock&& other) noexcept
+                    : m_locked(false) //other.m_locked.load())
+                    {}
+
+                    atomic_lock& operator=(atomic_lock&& other) noexcept
+                    {
+                         //m_locked.store(other.m_locked.load());
+                         m_locked.store(false);
+                         return *this;
+                    }*/
+
+                    void lock()
+                    {
+                        //m_locked.lock();
+                        bool expected = false;
+                        while (!m_locked.compare_exchange_strong(expected, true)){}
+                        //std::cout << "aquired lock" << std::endl;
+                    }
+
+                    void unlock()
+                    {
+                        //m_locked.unlock();
+                        bool expected = true;
+                        while (!m_locked.compare_exchange_strong(expected, false)){}
+                        //std::cout << "released lock" << std::endl;
+                    }
+                };
 
                 struct context_t;
 
@@ -57,10 +95,34 @@ namespace gridtools {
 
                         ~ucp_worker_handle() { destroy(); }
 
+                        static void empty_send_cb(void*, ucs_status_t) {}
+
                         void destroy() noexcept
                         {
                             if (!m_moved)
+                            {
+                                ucs_status_ptr_t request = ucp_worker_flush_nb(m_worker, 0, &ucp_worker_handle::empty_send_cb);
+                                if (reinterpret_cast<std::uintptr_t>(request) == UCS_OK)
+                                {
+                                    /* done */
+                                }
+                                else if (UCS_PTR_IS_ERR(request))
+                                {
+                                    std::terminate();
+                                }
+                                else
+                                {
+                                    ucs_status_t status;
+                                    do
+                                    {
+                                        ucp_worker_progress(m_worker);
+                                        status = ucp_request_check_status(request);
+                                    }
+                                    while( status == UCS_INPROGRESS);
+                                    ucp_request_release(request);
+                                }
                                 ucp_worker_destroy(m_worker);
+                            }
                         }
 
                         operator bool() const noexcept { return m_moved; }
@@ -95,14 +157,28 @@ namespace gridtools {
 
                     context_t*         m_context;
                     std::size_t        m_index;
+                    bool               m_shared;
                     rank_type          m_rank;
                     rank_type          m_size;
                     ucp_worker_handle  m_worker;
                     address_t          m_address;
                     cache_type         m_endpoint_cache;
+                    //std::unique_ptr<atomic_lock> m_lock;
+                    //std::mutex        m_lock;
                     /* Trial with queued sends
                     send_queue_type    m_send_queue;
                     send_inflight_type m_send_inflights;*/
+                    
+                    /*void lock()
+                    {
+                        if (!m_shared)
+                            m_lock->lock();
+                    }
+                    void unlock()
+                    {
+                        if (!m_shared)
+                            m_lock->unlock();
+                    }*/
 
                     worker_t() = default;
                     worker_t(context_t* context, std::size_t index, bool shared = true);
@@ -118,7 +194,29 @@ namespace gridtools {
                     address_t address() const noexcept { return m_address; }
                     const endpoint_t& connect(rank_type rank);
 
-                    void progress(worker_t* other_worker);
+                    void progress(worker_t* other_worker)
+                    {
+                        if (m_index > 0)
+                        {
+                            //lock();
+                            ucp_worker_progress(get());
+                            ucp_worker_progress(get());
+                            ucp_worker_progress(get());
+                            //unlock();
+                            //other_worker->lock();
+                            ucp_worker_progress(other_worker->get());
+                            //other_worker->unlock();
+                        }
+                        else
+                        {
+                            //other_worker->lock();
+                            ucp_worker_progress(other_worker->get());
+                            //other_worker->unlock();
+                            //lock();
+                            ucp_worker_progress(get());
+                            //unlock();
+                        }
+                    }
 
                     /* Trial with queued sends
                     // not thread-safe

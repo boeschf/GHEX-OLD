@@ -38,13 +38,15 @@ namespace gridtools {
             private: // members
 
                 ucx::worker_t* m_send_worker;
-                ucx::worker_t* m_recv_worker;
+                ucx::worker_t* m_send_worker_ts;
+                ucx::worker_t* m_recv_worker_ts;
 
             public: // ctors
 
-                communicator(ucx::worker_t* send_worker, ucx::worker_t* recv_worker)
+                communicator(ucx::worker_t* send_worker, ucx::worker_t* send_worker_ts, ucx::worker_t* recv_worker_ts)
                 : m_send_worker(send_worker)
-                , m_recv_worker(recv_worker)
+                , m_send_worker_ts(send_worker_ts)
+                , m_recv_worker_ts(recv_worker_ts)
                 {}
 
             public: // member functions
@@ -76,11 +78,11 @@ namespace gridtools {
                     if (reinterpret_cast<std::uintptr_t>(ret) == UCS_OK)
                     {
                         // send operation is completed immediately and the call-back function is not invoked
-                        return {};
+                        return {nullptr, m_send_worker, m_recv_worker_ts};
                     } 
                     else if(!UCS_PTR_IS_ERR(ret))
                     {
-                        return {(void*)ret, m_send_worker, m_recv_worker};
+                        return {(void*)ret, m_send_worker, m_recv_worker_ts};
                     }
                     else
                     {
@@ -89,14 +91,70 @@ namespace gridtools {
                     }
                 }
 
+                template<typename Message>
+                request send_ts(Message& msg, rank_type dst, tag_type tag)
+                {
+                    //m_send_worker->lock();
+                    const auto& ep = m_send_worker_ts->connect(dst);
+                    const auto stag = ((std::uint_fast64_t)tag << 32) | 
+                                       (std::uint_fast64_t)(rank());
+                    ucs_status_ptr_t ret = ucp_tag_send_nb(
+                        ep.get(),                                        // destination
+                        msg.data(),                                      // buffer
+                        msg.size()*sizeof(typename Message::value_type), // buffer size
+                        ucp_dt_make_contig(1),                           // data type
+                        stag,                                            // tag
+                        &communicator::empty_send_callback);             // callback function pointer: empty here
+                    //m_send_worker->unlock();
+                    if (reinterpret_cast<std::uintptr_t>(ret) == UCS_OK)
+                    {
+                        // send operation is completed immediately and the call-back function is not invoked
+                        return {nullptr, m_send_worker_ts, m_recv_worker_ts};
+                    } 
+                    else if(!UCS_PTR_IS_ERR(ret))
+                    {
+                        return {(void*)ret, m_send_worker_ts, m_recv_worker_ts};
+                    }
+                    else
+                    {
+                        // an error occurred
+                        throw std::runtime_error("ghex: ucx error - send operation failed");
+                    }
+                }
 
                 template<typename Message>
                 request recv(Message& msg, rank_type src, tag_type tag)
                 {
                     const auto rtag = ((std::uint_fast64_t)tag << 32) | 
                                        (std::uint_fast64_t)(src);
+                    //m_recv_worker_ts->lock();
                     ucs_status_ptr_t ret = ucp_tag_recv_nb(
-                        m_recv_worker->get(),                            // worker
+                        m_recv_worker_ts->get(),                         // worker
+                        msg.data(),                                      // buffer
+                        msg.size()*sizeof(typename Message::value_type), // buffer size
+                        ucp_dt_make_contig(1),                           // data type
+                        rtag,                                            // tag
+                        ~std::uint_fast64_t(0ul),                        // tag mask
+                        &communicator::empty_recv_callback);             // callback function pointer: empty here
+                    //m_recv_worker_ts->unlock();
+                    if(!UCS_PTR_IS_ERR(ret))
+                    {
+                        return {(void*)ret, m_recv_worker_ts, m_send_worker};
+                    }
+                    else
+                    {
+                        // an error occurred
+                        throw std::runtime_error("ghex: ucx error - recv operation failed");
+                    }
+                }
+
+                template<typename Message>
+                request recv_ts(Message& msg, rank_type src, tag_type tag)
+                {
+                    const auto rtag = ((std::uint_fast64_t)tag << 32) | 
+                                       (std::uint_fast64_t)(src);
+                    ucs_status_ptr_t ret = ucp_tag_recv_nb(
+                        m_recv_worker_ts->get(),                            // worker
                         msg.data(),                                      // buffer
                         msg.size()*sizeof(typename Message::value_type), // buffer size
                         ucp_dt_make_contig(1),                           // data type
@@ -105,7 +163,7 @@ namespace gridtools {
                         &communicator::empty_recv_callback);             // callback function pointer: empty here
                     if(!UCS_PTR_IS_ERR(ret))
                     {
-                        return {(void*)ret, m_recv_worker, m_send_worker};
+                        return {(void*)ret, m_recv_worker_ts, m_send_worker_ts};
                     }
                     else
                     {
@@ -124,7 +182,7 @@ namespace gridtools {
                 template<typename Message>
                 ucx::request2 recv2(Message& msg, rank_type src, tag_type tag)
                 {
-                    return {m_recv_worker->recv(msg,src,tag)};
+                    return {m_recv_worker_ts->recv(msg,src,tag)};
                 }*/
 
             };
