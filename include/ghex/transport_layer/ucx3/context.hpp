@@ -240,6 +240,7 @@ namespace gridtools {
                 communicator_type make_communicator() { return m_impl->make_communicator(); }
 
                 rank_type rank() { return m_impl->rank(); }
+
                 rank_type size() { return m_impl->size(); }
             }; 
 

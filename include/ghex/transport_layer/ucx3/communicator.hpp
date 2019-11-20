@@ -11,15 +11,12 @@
 #ifndef INCLUDED_GHEX_TL_UCX_COMMUNICATOR_HPP
 #define INCLUDED_GHEX_TL_UCX_COMMUNICATOR_HPP
 
-//#include <boost/optional.hpp>
 #include "../communicator.hpp"
 #include "./worker.hpp"
 #include "./request.hpp"
 
 namespace gridtools {
-    
     namespace ghex {
-
         namespace tl {
 
             /** Mpi communicator which exposes basic non-blocking transport functionality and 

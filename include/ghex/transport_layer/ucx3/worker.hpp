@@ -15,7 +15,6 @@
 #include <deque>
 #include "./error.hpp"
 #include "./endpoint.hpp"
-#include "./request_state.hpp"
 
 namespace gridtools {
     namespace ghex {
@@ -94,26 +93,6 @@ namespace gridtools {
                     };
 
                     using cache_type      = std::map<rank_type, endpoint_t>;
-
-                    struct ref_message
-                    {
-                        unsigned char* m_data;
-                        std::size_t    m_size;
-                        using value_type = unsigned char;
-                        unsigned char* data() noexcept {return m_data;}
-                        std::size_t size() const noexcept { return m_size; }
-                    };
-                   
-                    struct queue_item
-                    {
-                        ref_message        m_message;
-                        ucp_ep_h           m_ep;
-                        std::uint_fast64_t m_tag;
-                        std::shared_ptr<shared_request_state>  m_shared_request;
-                    };
-
-                    using send_queue_type    = std::deque<queue_item>;
-                    using send_inflight_type = std::vector<void*>;
 
                     context_t*         m_context;
                     std::size_t        m_index;
