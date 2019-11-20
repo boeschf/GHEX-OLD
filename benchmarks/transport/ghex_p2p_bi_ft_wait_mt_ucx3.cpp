@@ -134,7 +134,7 @@ int main(int argc, char *argv[])
 
         timer.tic();
         ttimer.tic();
-        #pragma omp parallel default(none), shared(std::cout,timer,comms,inflight,buff_size,num_threads,niter,peer_rank)
+        #pragma omp parallel //default(none), shared(std::cout,timer,comms,inflight,buff_size,num_threads,niter,peer_rank)
         {
             const auto thread_id = omp_get_thread_num();
 
