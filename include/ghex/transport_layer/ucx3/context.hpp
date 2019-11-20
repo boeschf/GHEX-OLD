@@ -13,7 +13,6 @@
 
 #include <vector>
 #include <memory>
-#include <atomic>
 #include "../context.hpp"
 #include "./worker.hpp"
 #include "./communicator.hpp"
@@ -101,18 +100,12 @@ namespace gridtools {
                     worker_t                  m_worker;
                     worker_vector             m_workers;
                     worker_vector             m_workers_ts;
-                    std::atomic<std::size_t>  m_recv_progress_count;
-                    std::atomic<std::size_t>  m_send_progress_count;
-                    std::atomic<std::size_t>  m_progress_count;
 
                 public: // ctors
 
                     template<typename DB>
                     context_t(DB&& db)
                     : m_db{std::forward<DB>(db)}
-                    , m_recv_progress_count(0ul)
-                    , m_send_progress_count(0ul)
-                    , m_progress_count(0ul)
                     {
                         // read run-time context
                         ucp_config_t* config_ptr;
@@ -181,28 +174,6 @@ namespace gridtools {
                         m_workers_ts.push_back(std::make_unique<worker_t>(this,index,true));
                         return {m_workers.back().get(), m_workers_ts.back().get(), &m_worker}; 
                     }
-                        
-                    /*void progress_recv_worker()
-                    {
-                        //if (++m_recv_progress_count % 5 == 0)
-                        ucp_worker_progress(m_worker.get());
-                    }*/
-
-                    /*void progress_send_worker(worker_t* send_worker)
-                    {
-                        //if (++m_send_progress_count % 20 == 0)
-                        ucp_worker_progress(send_worker->get());
-                    }*/
-
-                    /*void progress_all()
-                    {
-                        if (++m_progress_count % 3 == 0)
-                        {
-                            ucp_worker_progress(m_worker.get());
-                            for (auto& w : m_workers)
-                                ucp_worker_progress(w->get());
-                        }
-                    }*/
                 };
 
 
@@ -214,7 +185,6 @@ namespace gridtools {
                 , m_shared(shared)
                 , m_rank(context->rank())
                 , m_size(context->size())
-                //, m_lock(std::make_unique<atomic_lock>())
                 {
                     ucp_worker_params_t params;
                     params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;

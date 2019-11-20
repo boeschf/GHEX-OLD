@@ -12,7 +12,6 @@
 #define INCLUDED_GHEX_TL_UCX_REQUEST_HPP
 
 #include "./worker.hpp"
-#include <iostream>
 
 namespace gridtools {
     namespace ghex {
@@ -63,70 +62,30 @@ namespace gridtools {
 
                     bool ready()
                     {
-                        //return test_this();
-                        //return test();
                         progress_only();
                         return test_only();
                     }
 
-                    /*bool test_this()
-                    {
-                        if (m_ptr)
-                        {
-                            progress_this();
-                            return (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                        }
-                        else
-                            return true;
-                    }*/
                     
                     bool test_only()
                     {
-                        //std::cout << "test only" << std::endl;
                         if (m_ptr)
                         {
-                            //m_worker->lock();
-                            const auto res = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                            //m_worker->unlock();
-                            //std::cout << "test only done" << std::endl;
-                            return res;
+                            return (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
                         }
                         else
                         {
-                            //std::cout << "test only done" << std::endl;
                             return true;
                         }
                     }
 
                     void progress_only()
                     {
-                        //std::cout << "progress only" << std::endl;
                         if (m_worker)
                         {
-                            //m_worker->lock();
-                            //if (!m_worker->m_shared)
-                            //{
-                            //    const auto res = m_worker->m_lock->m_locked.load();
-                            //    if (res != true)
-                            //    {
-                            //        std::cout << "WTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF" << std::endl;
-                            //        std::terminate();
-                            //    }
-                            //    //std::cout << "ucp progress begin" << std::endl;
-                                ucp_worker_progress(m_worker->get());
-                            //    //std::cout << "ucp progress end" << std::endl;
-                            //}
-                            //else
-                            //    ucp_worker_progress(m_worker->get());
-                            //m_worker->unlock();
+                            ucp_worker_progress(m_worker->get());
                         }
-                        //std::cout << "progress only done" << std::endl;
                     }
-                    
-                    /*void progress_this()
-                    {
-                        ucp_worker_progress(m_worker->get());
-                    }*/
 
                     // expensive from here
                     void wait()
@@ -140,16 +99,24 @@ namespace gridtools {
                         {
                             if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                             {
-                                //ucp_worker_progress(m_other_worker->get());
                                 return true;
                             }
-                            m_worker->progress(m_other_worker);
+                            if (m_worker->m_index > 0)
+                            {
+                                ucp_worker_progress(m_worker->get());
+                                ucp_worker_progress(m_worker->get());
+                                ucp_worker_progress(m_worker->get());
+                                ucp_worker_progress(m_other_worker->get());
+                            }
+                            else
+                            {
+                                ucp_worker_progress(m_other_worker->get());
+                                ucp_worker_progress(m_worker->get());
+                            }
                             return (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
                         }
                         else
                         {
-                            //ucp_worker_progress(m_worker->get());
-                            //ucp_worker_progress(m_other_worker->get());
                             return true;
                         }
                     }

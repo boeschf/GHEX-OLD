@@ -12,9 +12,25 @@
 #define INCLUDED_GHEX_TL_CONTINUATION_COMMUNICATOR_HPP
 
 #include <boost/lockfree/queue.hpp>
-#include "./callback_communicator.hpp"
+#include <vector>
+#include <boost/callable_traits.hpp>
 
-#define GHEX_CONT_USE_MEM_POOL
+/** @brief checks the arguments of callback function object */
+#define GHEX_CHECK_CALLBACK_CONT                                                              \
+    using args_t = boost::callable_traits::args_t<CallBack>;                                  \
+    using arg0_t = std::tuple_element_t<0, args_t>;                                           \
+    using arg1_t = std::tuple_element_t<1, args_t>;                                           \
+    using arg2_t = std::tuple_element_t<2, args_t>;                                           \
+    static_assert(std::tuple_size<args_t>::value==3,                                          \
+        "callback must have 3 arguments");                                                    \
+    static_assert(std::is_convertible<arg1_t,rank_type>::value,                               \
+        "rank_type is not convertible to second callback argument type");                     \
+    static_assert(std::is_convertible<arg2_t,tag_type>::value,                                \
+        "tag_type is not convertible to third callback argument type");                       \
+    static_assert(std::is_convertible<arg0_t,typename element_type::message_arg_type>::value, \
+        "first callback argument type is not a message_type");
+
+//#define GHEX_CONT_USE_MEM_POOL
 
 namespace gridtools{
     namespace ghex {
@@ -29,14 +45,14 @@ namespace gridtools{
                     // volatile is needed to prevent the compiler
                     // from optimizing away the check of this member
                     volatile bool m_ready = false;
-                    bool is_ready() const noexcept { return m_ready; }
+                    bool ready() const noexcept { return m_ready; }
                 };
 
                 // simple request class which is returned from send and recv calls
                 struct request
                 {
                     std::shared_ptr<request_state> m_request_state;
-                    bool ready() const noexcept { return m_request_state ? m_request_state->is_ready() : true; }
+                    bool ready() const noexcept { return m_request_state ? m_request_state->ready() : true; }
                 };
 
                 // type-erased message
@@ -79,7 +95,7 @@ namespace gridtools{
                 template<typename T>
                 struct ref_message
                 {
-                    using value_type = T;//unsigned char;
+                    using value_type = T;
                     T* m_data;
                     std::size_t m_size;
                     T* data() noexcept { return m_data; }
@@ -186,12 +202,9 @@ namespace gridtools{
                     {
                         while (!m_chunk_queue.push(ptr)) {}
                     }
-
                 };
 
-
             } // namespace cont_detail
-
 
             
             // thread-safe shared communicator which handles callbacks
@@ -233,16 +246,25 @@ namespace gridtools{
 
             private: // members
 
+#ifdef GHEX_CONT_USE_MEM_POOL
                 cont_detail::memory_pool m_element_mem_pool;
+#endif
                 send_container_type m_sends;
                 recv_container_type m_recvs;
+                std::atomic<std::size_t> m_early;
 
             public: // ctors
 
                 continuation_communicator() 
+#ifdef GHEX_CONT_USE_MEM_POOL
                 : m_element_mem_pool(sizeof(element_type), 512)
                 , m_sends(512)
                 , m_recvs(512) 
+#else
+                : m_sends(512)
+                , m_recvs(512) 
+#endif
+                , m_early(0ul)
                 {}
 
                 continuation_communicator(const continuation_communicator&) = delete;
@@ -253,12 +275,6 @@ namespace gridtools{
                         progress();
                         progress();
                     /* TODO: consume all*/
-                    /*while (true)
-                    {
-                        progress();
-                        if (m_sends.empty() && m_recvs.empty())
-                            break;
-                    }*/
                 }
                 
             public: // send
@@ -269,7 +285,7 @@ namespace gridtools{
                 template<typename Comm, typename Message, typename CallBack>
                 request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb)
                 {
-                    GHEX_CHECK_CALLBACK
+                    GHEX_CHECK_CALLBACK_CONT
                     using is_rvalue = std::is_rvalue_reference<decltype(std::forward<Message>(msg))>;
                     return send(comm, std::forward<Message>(msg), dst, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
@@ -290,7 +306,7 @@ namespace gridtools{
                 template <typename Comm, typename Message, typename Neighs, typename CallBack>
                 std::vector<request> send_multi(Comm& comm, Message&& msg, const Neighs& neighs, tag_type tag, CallBack&& cb)
                 {
-                    GHEX_CHECK_CALLBACK
+                    GHEX_CHECK_CALLBACK_CONT
                     using is_rvalue = std::is_rvalue_reference<decltype(std::forward<Message>(msg))>;
                     return send_multi(comm, std::forward<Message>(msg), neighs, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
@@ -310,7 +326,7 @@ namespace gridtools{
                 template<typename Comm, typename Message, typename CallBack>
                 request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb)
                 {
-                    GHEX_CHECK_CALLBACK
+                    GHEX_CHECK_CALLBACK_CONT
                     using is_rvalue = std::is_rvalue_reference<decltype(std::forward<Message>(msg))>;
                     return recv(comm, std::forward<Message>(msg), src, tag, std::forward<CallBack>(cb), is_rvalue());
                 }
@@ -330,39 +346,29 @@ namespace gridtools{
                     std::size_t num_completed = 0u;
                     num_completed += run(m_sends);
                     num_completed += run(m_recvs);
+                    num_completed += m_early.exchange(0ul);
                     return num_completed;
                 }
 
 
             private: // implementation
-
-
-                template<typename Comm, typename Message, typename CallBack>
-                request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb, std::false_type)
-                {
-                    using V = typename Message::value_type;
-                    request req{std::make_shared<cont_detail::request_state>()};
-                    auto fut = comm.send_ts(msg,dst,tag);
-                    if (fut.test_only())
-                    {
-                        cb(message_type{ref_message<V>{msg.data(),msg.size()}}, dst, tag);
-                        req.m_request_state->m_ready = true;
-                        return req;
-                    }
-#ifndef GHEX_CONT_USE_MEM_POOL
-                    auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
-                                                        ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
-#else
-                    auto element_ptr = new(m_element_mem_pool.alloc()) 
-                        element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
-                                     ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
-#endif
-                    while (!m_sends.push(element_ptr)) {}
-                    return req;
-                }
                 
+                template<typename Future, typename Message, typename CallBack>
+                inline element_type* make_element(Future&& fut, Message&& msg, rank_type rank, tag_type tag, CallBack&& cb, request& req)
+                {
+#ifndef GHEX_CONT_USE_MEM_POOL
+                    return new element_type{std::forward<CallBack>(cb), rank, tag, std::move(fut), 
+                                                        std::move(msg), req.m_request_state};
+#else
+                    return new(m_element_mem_pool.alloc()) 
+                        element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
+                                     std::move(msg), req.m_request_state};
+#endif
+                    
+                }
+
                 template<typename Comm, typename Message, typename CallBack>
-                request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb, std::true_type)
+                inline request send_impl(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb)
                 {
                     request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.send_ts(msg,dst,tag);
@@ -370,46 +376,16 @@ namespace gridtools{
                     {
                         cb(message_type{std::move(msg)}, dst, tag);
                         req.m_request_state->m_ready = true;
+                        ++m_early;
                         return req;
                     }
-#ifndef GHEX_CONT_USE_MEM_POOL
-                    auto element_ptr = new element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
-                                                        std::move(msg), req.m_request_state};
-#else
-                    auto element_ptr = new(m_element_mem_pool.alloc()) 
-                        element_type{std::forward<CallBack>(cb), dst, tag, std::move(fut), 
-                                     std::move(msg), req.m_request_state};
-#endif
+                    auto element_ptr = make_element(std::move(fut), std::move(msg), dst, tag, std::forward<CallBack>(cb), req);
                     while (!m_sends.push(element_ptr)) {}
                     return req;
                 }
 
                 template<typename Comm, typename Message, typename CallBack>
-                request recv(Comm& comm, Message& msg, rank_type src, tag_type tag, CallBack&& cb, std::false_type)
-                {
-                    using V = typename Message::value_type;
-                    request req{std::make_shared<cont_detail::request_state>()};
-                    auto fut = comm.recv_ts(msg,src,tag);
-                    if (fut.test_only())
-                    {
-                        cb(message_type{ref_message<V>{msg.data(),msg.size()}}, src, tag);
-                        req.m_request_state->m_ready = true;
-                        return req;
-                    }
-#ifndef GHEX_CONT_USE_MEM_POOL
-                    auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
-                                                        ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
-#else
-                    auto element_ptr = new(m_element_mem_pool.alloc()) 
-                        element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
-                                     ref_message<V>{msg.data(),msg.size()}, req.m_request_state};
-#endif
-                    while (!m_recvs.push(element_ptr)) {}
-                    return req;
-                }
-
-                template<typename Comm, typename Message, typename CallBack>
-                request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb, std::true_type)
+                inline request recv_impl(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb)
                 {
                     request req{std::make_shared<cont_detail::request_state>()};
                     auto fut = comm.recv_ts(msg,src,tag);
@@ -417,18 +393,40 @@ namespace gridtools{
                     {
                         cb(message_type{std::move(msg)}, src, tag);
                         req.m_request_state->m_ready = true;
+                        ++m_early;
                         return req;
                     }
-#ifndef GHEX_CONT_USE_MEM_POOL
-                    auto element_ptr = new element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
-                                                        std::move(msg), req.m_request_state};
-#else
-                    auto element_ptr = new(m_element_mem_pool.alloc()) 
-                        element_type{std::forward<CallBack>(cb), src, tag, std::move(fut), 
-                                     std::move(msg), req.m_request_state};
-#endif
+                    auto element_ptr = make_element(std::move(fut), std::move(msg), src, tag, std::forward<CallBack>(cb), req);
                     while (!m_recvs.push(element_ptr)) {}
                     return req;
+                }
+
+                template<typename Comm, typename Message, typename CallBack>
+                inline request send(Comm& comm, Message& msg, rank_type dst, tag_type tag, CallBack&& cb, std::false_type)
+                {
+                    using V = typename Message::value_type;
+                    ref_message<V> r_msg{msg.data(),msg.size()};
+                    return send_impl(comm, std::move(r_msg), dst, tag, std::forward<CallBack>(cb));
+                }
+                
+                template<typename Comm, typename Message, typename CallBack>
+                inline request send(Comm& comm, Message&& msg, rank_type dst, tag_type tag, CallBack&& cb, std::true_type)
+                {
+                    return send_impl(comm, std::move(msg), dst, tag, std::forward<CallBack>(cb));
+                }
+
+                template<typename Comm, typename Message, typename CallBack>
+                request recv(Comm& comm, Message& msg, rank_type src, tag_type tag, CallBack&& cb, std::false_type)
+                {
+                    using V = typename Message::value_type;
+                    ref_message<V> r_msg{msg.data(),msg.size()};
+                    return recv_impl(comm, std::move(r_msg), src, tag, std::forward<CallBack>(cb));
+                }
+
+                template<typename Comm, typename Message, typename CallBack>
+                request recv(Comm& comm, Message&& msg, rank_type src, tag_type tag, CallBack&& cb, std::true_type)
+                {
+                    return recv_impl(comm, std::move(msg), src, tag, std::forward<CallBack>(cb));
                 }
 
                 template <typename Comm, typename Message, typename Neighs, typename CallBack>

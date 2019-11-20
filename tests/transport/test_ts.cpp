@@ -10,6 +10,7 @@
  */
 #include <iostream>
 #include <ghex/transport_layer/continuation_communicator.hpp>
+#include <ghex/transport_layer/message_buffer.hpp>
 #include <ghex/transport_layer/mpi/communicator.hpp>
 #include <ghex/transport_layer/ucx3/address_db_mpi.hpp>
 #include <ghex/transport_layer/ucx3/context.hpp>
@@ -33,7 +34,6 @@ using comm_t          = gridtools::ghex::tl::communicator<gridtools::ghex::tl::m
 using cont_comm_t     = gridtools::ghex::tl::continuation_communicator;
 using msg_type        = gridtools::ghex::tl::message_buffer<>;
 
-std::atomic<std::size_t> num_completed;
 
 // ring-communication using arbitrary number of threads for communication and progressing
 // each rank has num_comm_threads threads
@@ -54,6 +54,7 @@ std::atomic<std::size_t> num_completed;
 //
 void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, bool wait)
 {
+    std::atomic<std::size_t> num_completed;
     num_completed.store(0u);
 
 #ifdef GHEX_TEST_TS_UCX
@@ -127,7 +128,7 @@ void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, b
 
     // lambda which progresses the queues
     auto progress_func =
-    [&cont_comm, num_requests]()
+    [&cont_comm, num_requests, &num_completed]()
     {
         while(num_completed < num_requests)
             num_completed += cont_comm.progress();
@@ -167,6 +168,8 @@ void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, b
         EXPECT_TRUE(recv_msgs[i].data<int>()[1] == (int)i);
     }
 
+    std::cout << "end of func" << std::endl;
+
     //comm.barrier();
 }
 
@@ -192,6 +195,7 @@ void test_ring(std::size_t num_progress_threads, std::size_t num_comm_threads, b
 //
 void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_threads, bool wait)
 {
+    std::atomic<std::size_t> num_completed;
     num_completed.store(0u);
 
 #ifdef GHEX_TEST_TS_UCX
@@ -226,7 +230,7 @@ void test_send_multi(std::size_t num_progress_threads, std::size_t num_comm_thre
 
     // progress function is equal for all ranks
     auto progress_func =
-    [&cont_comm, num_requests]()
+    [&cont_comm, num_requests, &num_completed]()
     {
         while(num_completed < num_requests)
             num_completed += cont_comm.progress();

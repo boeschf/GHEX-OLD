@@ -144,7 +144,8 @@ int main(int argc, char *argv[])
 
             std::vector<msg_t> send_msgs;
             std::vector<msg_t> recv_msgs;
-            std::vector<cont_future_t> send_reqs(inflight);
+            //std::vector<cont_future_t> send_reqs(inflight);
+            std::vector<future_t> send_reqs(inflight);
             std::vector<cont_future_t> recv_reqs(inflight);
             for (int j=0; j<inflight; ++j)
             {
@@ -204,13 +205,15 @@ int main(int argc, char *argv[])
                         sdbg += num_threads;
                         dbg  += num_threads;
 
-                        send_reqs[j] = cont_comm.send(
+                        ++sent;
+                        send_reqs[j] = comm.send(send_msgs[j], peer_rank, thread_id*inflight+j);
+                        /*send_reqs[j] = cont_comm.send(
                             comm,
                             send_msgs[j], peer_rank, thread_id*inflight+j,
                             [](cont_msg_t, int, int)
                             {
                                 ++sent;
-                            });
+                            });*/
                     }
                     else cont_comm.progress();
                 }
