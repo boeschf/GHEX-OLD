@@ -12,6 +12,7 @@
 #include <vector>
 #include <atomic>
 #include <omp.h>
+#include <thread>
 
 //#include <ghex/transport_layer/ucx/threads.hpp>
 #include <ghex/common/timer.hpp>
@@ -132,14 +133,8 @@ int main(int argc, char *argv[])
 
         //std::cout << "starting main loop" << std::endl;
 
-        timer.tic();
-        ttimer.tic();
-        #pragma omp parallel //default(none), shared(std::cout,timer,comms,inflight,buff_size,num_threads,niter,peer_rank)
+        auto func = [&timer,niter,inflight,num_threads,peer_rank,buff_size](comm_t comm, int thread_id)
         {
-            const auto thread_id = omp_get_thread_num();
-
-            auto comm = comms[thread_id];
-
             std::vector<msg_t> send_msgs;
             std::vector<msg_t> recv_msgs;
             std::vector<future_t> send_reqs(inflight);
@@ -152,35 +147,27 @@ int main(int argc, char *argv[])
                 recv_msgs.back().data<char>()[0] = 0;
             }
             
-            int dbg = 0;//, sdbg = 0, rdbg = 0;
+            int dbg = 0;
             for (int ii=0; ii<niter/(inflight*num_threads); ++ii)
             {
-                    if(thread_id == 0 && dbg >= (niter/(inflight*num_threads))/(10))
-                    {
-                        dbg = 0;
-                        const auto time = timer.vtoc();
-                        std::cout << time/1000000 << "\n";
-                        timer.tic();
-                        /*const double bytes = ((received-last_received + sent-last_sent)*size*buff_size)/2;
-                        std::cout << rank << " total bwdt MB/s:      " << bytes/timer.toc() << "\n";
-                        timer.tic();
-                        last_received = received;
-                        last_sent = sent;*/
-                    }
+                if(thread_id == 0 && dbg >= (niter/(inflight*num_threads))/(10))
+                {
+                    dbg = 0;
+                    const auto time = timer.vtoc();
+                    std::cout << time/1000000 << "\n";
+                    timer.tic();
+                }
                 ++dbg;
 
                 for(int j=0; j<inflight; j++)
                 {
-		
-                    //dbg      += num_threads;
-		            //sent     += num_threads;
-		            //received += num_threads;
-                        
                     recv_reqs[j] = comm.recv(recv_msgs[j], peer_rank, thread_id*inflight + j);
-                    //send_reqs[j] = comm.send(send_msgs[j], peer_rank, thread_id*inflight + j);
                 }
                 for(int j=0; j<inflight; j++)
+                {
                     send_reqs[j] = comm.send(send_msgs[j], peer_rank, thread_id*inflight + j);
+                    //std::cout << "send " << j << std::endl;
+                }
 	    
                 /* wait for all */
 	            for(int j=0; j<inflight; j++)
@@ -191,8 +178,19 @@ int main(int argc, char *argv[])
 	            for(int j=0; j<inflight; j++)
                     recv_reqs[j].wait();
             }
+        };
+
+        std::vector<std::thread> threads;
+        threads.reserve(num_threads);
+        timer.tic();
+        ttimer.tic();
+        for (int i = 0; i<num_threads; ++i)
+        {
+            threads.push_back(std::thread{ func, comms[i], i});
         }
-        
+        for (auto& t : threads)
+            t.join();
+
         if(rank == 1)
         {
             const double bytes = (niter/(inflight*num_threads))*(inflight*num_threads)*size*buff_size;

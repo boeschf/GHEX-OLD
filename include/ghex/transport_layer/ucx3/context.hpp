@@ -176,7 +176,6 @@ namespace gridtools {
                     }
                 };
 
-
                 // worker implementation
 
                 worker_t::worker_t(context_t* context, std::size_t index, bool shared)
@@ -185,11 +184,13 @@ namespace gridtools {
                 , m_shared(shared)
                 , m_rank(context->rank())
                 , m_size(context->size())
+                , m_mutex(std::make_unique<mutex_type>())
                 {
                     ucp_worker_params_t params;
                     params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
                     if (shared)
-                        params.thread_mode = UCS_THREAD_MODE_MULTI;
+                    //  params.thread_mode = UCS_THREAD_MODE_MULTI;
+                        params.thread_mode = UCS_THREAD_MODE_SERIALIZED;
                     else
                         //params.thread_mode = UCS_THREAD_MODE_SERIALIZED;
                         params.thread_mode = UCS_THREAD_MODE_SINGLE;

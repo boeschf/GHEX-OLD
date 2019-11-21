@@ -82,13 +82,30 @@ namespace gridtools {
                     const auto& ep = send_worker->connect(dst);
                     const auto stag = ((std::uint_fast64_t)tag << 32) | 
                                        (std::uint_fast64_t)(rank());
-                    ucs_status_ptr_t ret = ucp_tag_send_nb(
+                    ucs_status_ptr_t ret;
+                    if (send_worker->m_shared)
+                    {
+                    //const typename ucx::worker_t::lock_type lock(*(send_worker->m_mutex));
+                    send_worker->lock();
+                    ret = ucp_tag_send_nb(
                         ep.get(),                                        // destination
                         buffer,                                          // buffer
                         size,                                            // buffer size
                         ucp_dt_make_contig(1),                           // data type
                         stag,                                            // tag
                         &communicator::empty_send_callback);             // callback function pointer: empty here
+                    send_worker->unlock();
+                    }
+                    else
+                    {
+                    ret = ucp_tag_send_nb(
+                        ep.get(),                                        // destination
+                        buffer,                                          // buffer
+                        size,                                            // buffer size
+                        ucp_dt_make_contig(1),                           // data type
+                        stag,                                            // tag
+                        &communicator::empty_send_callback);             // callback function pointer: empty here
+                    }
                     if (reinterpret_cast<std::uintptr_t>(ret) == UCS_OK)
                     {
                         // send operation is completed immediately and the call-back function is not invoked
@@ -109,7 +126,11 @@ namespace gridtools {
                 {
                     const auto rtag = ((std::uint_fast64_t)tag << 32) | 
                                        (std::uint_fast64_t)(src);
-                    ucs_status_ptr_t ret = ucp_tag_recv_nb(
+                    ucs_status_ptr_t ret;
+                    {
+                    //const typename ucx::worker_t::lock_type lock(*(recv_worker->m_mutex));
+                    recv_worker->lock();
+                    ret = ucp_tag_recv_nb(
                         recv_worker->get(),                              // worker
                         buffer,                                          // buffer
                         size,                                            // buffer size
@@ -117,6 +138,8 @@ namespace gridtools {
                         rtag,                                            // tag
                         ~std::uint_fast64_t(0ul),                        // tag mask
                         &communicator::empty_recv_callback);             // callback function pointer: empty here
+                    recv_worker->unlock();
+                    }
                     if(!UCS_PTR_IS_ERR(ret))
                     {
                         return {(void*)ret, recv_worker, send_worker};

@@ -13,13 +13,54 @@
 
 #include <map>
 #include <deque>
+#include <mutex>
 #include "./error.hpp"
 #include "./endpoint.hpp"
+#include <atomic>
+#include <sched.h>
 
 namespace gridtools {
     namespace ghex {
         namespace tl {
             namespace ucx {
+
+                struct atomic_mutex
+                {
+                    std::atomic<bool> m_flag;
+
+                    atomic_mutex() noexcept : m_flag(false) {}
+
+                    inline bool try_lock() noexcept
+                    {
+                        bool expected = false;
+                        return m_flag.compare_exchange_weak(expected,true, std::memory_order_relaxed);
+                    }
+
+                    inline bool try_unlock() noexcept
+                    {
+                        bool expected = true;
+                        return m_flag.compare_exchange_weak(expected,false, std::memory_order_relaxed);
+                    }
+
+                    inline void lock() noexcept
+                    {
+                        while (!try_lock()) 
+                        {
+                        //sched_yield();
+                        }
+                    }
+
+                    inline void unlock() noexcept
+                    {
+                        while (!try_unlock()) 
+                        {
+                        //sched_yield();
+                        }
+                        //sched_yield();
+                    }
+                };
+
+
 
                 struct context_t;
 
@@ -27,6 +68,9 @@ namespace gridtools {
                 {
                     using rank_type = typename endpoint_t::rank_type;
                     using tag_type  = int;
+                    //using mutex_type = std::mutex;
+                    using mutex_type = atomic_mutex;
+                    //using lock_type  = std::lock_guard<mutex_type>;
 
                     struct ucp_worker_handle
                     {
@@ -102,6 +146,7 @@ namespace gridtools {
                     ucp_worker_handle  m_worker;
                     address_t          m_address;
                     cache_type         m_endpoint_cache;
+                    std::unique_ptr<mutex_type> m_mutex;
 
                     worker_t() = default;
                     worker_t(context_t* context, std::size_t index, bool shared = true);
@@ -116,6 +161,14 @@ namespace gridtools {
                     ucp_worker_h get() const noexcept { return m_worker.get(); }
                     address_t address() const noexcept { return m_address; }
                     const endpoint_t& connect(rank_type rank);
+
+
+                    inline void lock() noexcept { m_mutex->lock(); }
+                    inline void unlock() noexcept { m_mutex->unlock(); }
+                    inline bool try_lock() noexcept { return m_mutex->try_lock(); }
+                    //inline void lock() noexcept {  }
+                    //inline void unlock() noexcept {  }
+                    //inline bool try_lock() noexcept { return true; }
                 };
             
             } // namespace ucx
