@@ -85,106 +85,6 @@ namespace gridtools {
 
                     bool ready()
                     {
-                        //progress_only();
-                        //return test_only();
-                        return test_and_progress_only_2();
-                    }
-                    
-                    bool test_only()
-                    {
-                        if (m_ptr)
-                        {
-                            bool result = false;
-                            if (!m_worker->m_shared)
-                            {
-                                result = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                                if (result)
-                                {
-                                    ucp_request_free(m_ptr);
-                                    m_ptr = nullptr;
-                                }
-                            }
-                            else
-                            {
-                                if (m_worker->try_lock())
-                                {
-                                    result = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                                    if (result)
-                                    {
-                                        ucp_request_free(m_ptr);
-                                        m_ptr = nullptr;
-                                    }
-                                    m_worker->unlock();
-                                }
-                            }
-                            return result;
-                        }
-                        else
-                        {
-                            return true;
-                        }
-                    }
-
-                    void progress_only()
-                    {
-                        if (m_worker)
-                        {
-                            if (m_worker->m_shared)
-                            {
-                                if (m_worker->try_lock())
-                                //m_worker->lock();
-                                {
-                                    ucp_worker_progress(m_worker->get());
-                                    m_worker->unlock();
-                                }
-                            }
-                            else
-                                ucp_worker_progress(m_worker->get());
-                        }
-                    }
-                    
-                    bool test_and_progress_only()
-                    {
-                        if (!m_ptr) return true;
-                        
-                        if (m_worker->m_shared)
-                        {
-                            if (m_worker->try_lock())
-                            {
-                                bool result = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                                if (result)
-                                {
-                                    ucp_request_free(m_ptr);
-                                    m_ptr = nullptr;
-                                    m_worker->unlock();
-                                    return true;
-                                }
-                                ucp_worker_progress(m_worker->get());
-                                result = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                                if (result)
-                                {
-                                    ucp_request_free(m_ptr);
-                                    m_ptr = nullptr;
-                                    m_worker->unlock();
-                                    return true;
-                                }
-                                m_worker->unlock();
-                                return false;
-                            }
-                            else
-                                return false;
-                        }
-                        else
-                        {
-                            auto result = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                            if (result) return true;
-                            ucp_worker_progress(m_worker->get());
-                            return (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                        }
-                    }
-                    
-                    bool test_and_progress_only_2()
-                    {
                         if (!m_ptr) return true;
 
                         if (m_worker->m_index > 0)
@@ -205,8 +105,8 @@ namespace gridtools {
 
                                 // progress a few times
                                 ucp_worker_progress(m_worker->get());
-                                ucp_worker_progress(m_worker->get());
-                                ucp_worker_progress(m_worker->get());
+                                //ucp_worker_progress(m_worker->get());
+                                //ucp_worker_progress(m_worker->get());
                                 
                                 if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                 {
@@ -227,8 +127,9 @@ namespace gridtools {
                             {
                                 // thread safe here
                                 
-                                if (m_worker->try_lock())
+                                //if (m_worker->try_lock())
                                 {
+                                    m_worker->lock();
                                     if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                     {
                                         ucp_request_free(m_ptr);
@@ -238,8 +139,8 @@ namespace gridtools {
                                     }
                                     // progress a few times
                                     ucp_worker_progress(m_worker->get());
-                                    ucp_worker_progress(m_worker->get());
-                                    ucp_worker_progress(m_worker->get());
+                                    //ucp_worker_progress(m_worker->get());
+                                    //ucp_worker_progress(m_worker->get());
                                     
                                     if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                     {
@@ -248,7 +149,6 @@ namespace gridtools {
                                         m_worker->unlock();
                                         return true;
                                     }
-                                        
                                     m_worker->unlock();
                                 }
 
@@ -265,8 +165,9 @@ namespace gridtools {
                         {
                             // receive request
                             // needs tread safety always
-                            if (m_worker->try_lock())
+                            //if (m_worker->try_lock())
                             {
+                                m_worker->lock();
                                 if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                 {
                                     m_worker->unlock();
@@ -300,12 +201,6 @@ namespace gridtools {
                         }
                     }
 
-                    // expensive from here
-                    //void wait()
-                    //{
-                        //while(!test()) {}
-                    //}
-
                     void wait()
                     {
                         if (!m_ptr) return;
@@ -330,8 +225,8 @@ namespace gridtools {
                                 {
                                     // progress a few times
                                     ucp_worker_progress(m_worker->get());
-                                    ucp_worker_progress(m_worker->get());
-                                    ucp_worker_progress(m_worker->get());
+                                    //ucp_worker_progress(m_worker->get());
+                                    //ucp_worker_progress(m_worker->get());
                                     
                                     if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                     {
@@ -352,7 +247,7 @@ namespace gridtools {
                             {
                                 // thread safe here
                                 
-                                if (m_worker->try_lock())
+                                /*if (m_worker->try_lock())
                                 {
                                     if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                     {
@@ -363,7 +258,7 @@ namespace gridtools {
                                     }
                                     else
                                         m_worker->unlock();
-                                }
+                                }*/
 
                                 while (true)
                                 {
@@ -371,8 +266,8 @@ namespace gridtools {
                                     {
                                         // progress a few times
                                         ucp_worker_progress(m_worker->get());
-                                        ucp_worker_progress(m_worker->get());
-                                        ucp_worker_progress(m_worker->get());
+                                        //ucp_worker_progress(m_worker->get());
+                                        //ucp_worker_progress(m_worker->get());
                                     
                                         if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                         {
@@ -397,7 +292,7 @@ namespace gridtools {
                         {
                             // receive request
                             // needs tread safety always
-                            if (m_worker->try_lock())
+                            /*if (m_worker->try_lock())
                             {
                                 if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                 {
@@ -406,7 +301,7 @@ namespace gridtools {
                                 }
                                 else
                                     m_worker->unlock();
-                            }
+                            }*/
 
                             while (true)
                             {
@@ -440,90 +335,6 @@ namespace gridtools {
                         }
                     }
 
-                    /*bool test_bak()
-                    {
-                        if (m_ptr)
-                        {
-                            bool result = false;
-                            {
-                            const std::lock_guard<std::mutex> lock(*(m_worker->m_mutex));
-                            result = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                            }
-                            if (result) 
-                            {
-                                {
-                                const std::lock_guard<std::mutex> lock(*(m_worker->m_mutex));
-                                ucp_request_free(m_ptr);
-                                m_ptr =  nullptr;
-                                }
-                                return result;
-                            }
-                            if (m_worker->m_index > 0)
-                            {
-                                //if (m_worker->m_shared)
-                                {
-                                    //const std::lock_guard<std::mutex> lock(*(m_worker->m_mutex));
-                                    if (m_worker->m_mutex->try_lock())
-                                    {
-                                    ucp_worker_progress(m_worker->get());
-                                    ucp_worker_progress(m_worker->get());
-                                    ucp_worker_progress(m_worker->get());
-                                    m_worker->m_mutex->unlock();
-                                    }
-                                }
-                                //else
-                                //{
-                                //    ucp_worker_progress(m_worker->get());
-                                //    ucp_worker_progress(m_worker->get());
-                                //    ucp_worker_progress(m_worker->get());
-                                //}
-                                //const std::lock_guard<std::mutex> lock(*(m_other_worker->m_mutex));
-                                if (m_other_worker->m_mutex->try_lock())
-                                {
-                                ucp_worker_progress(m_other_worker->get());
-                                m_other_worker->m_mutex->unlock();
-                                }
-                            }
-                            else
-                            {
-                                //if (m_other_worker->m_shared)
-                                {
-                                    //const std::lock_guard<std::mutex> lock(*(m_other_worker->m_mutex));
-                                    if (m_other_worker->m_mutex->try_lock())
-                                    {
-                                    ucp_worker_progress(m_other_worker->get());
-                                    m_other_worker->m_mutex->unlock();
-                                    }
-                                }
-                                //else
-                                //{
-                                //    ucp_worker_progress(m_other_worker->get());
-                                //}
-                                //const std::lock_guard<std::mutex> lock(*(m_worker->m_mutex));
-                                if (m_worker->m_mutex->try_lock())
-                                {
-                                    ucp_worker_progress(m_worker->get());
-                                    m_worker->m_mutex->unlock();
-                                }
-                            }
-                            {
-                            const std::lock_guard<std::mutex> lock(*(m_worker->m_mutex));
-                            result = (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                            }
-                            if (result)
-                            {
-                                const std::lock_guard<std::mutex> lock(*(m_worker->m_mutex));
-                                ucp_request_free(m_ptr);
-                                m_ptr =  nullptr;
-                            }
-                            return result;
-                            //return (ucp_request_check_status(m_ptr) != UCS_INPROGRESS);
-                        }
-                        else
-                        {
-                            return true;
-                        }
-                    }*/
                 };
 
             } // namespace ucx

@@ -33,13 +33,13 @@ namespace gridtools {
                     inline bool try_lock() noexcept
                     {
                         bool expected = false;
-                        return m_flag.compare_exchange_weak(expected,true, std::memory_order_relaxed);
+                        return m_flag.compare_exchange_strong(expected,true, std::memory_order_relaxed);
                     }
 
                     inline bool try_unlock() noexcept
                     {
                         bool expected = true;
-                        return m_flag.compare_exchange_weak(expected,false, std::memory_order_relaxed);
+                        return m_flag.compare_exchange_strong(expected,false, std::memory_order_relaxed);
                     }
 
                     inline void lock() noexcept
@@ -59,8 +59,6 @@ namespace gridtools {
                         //sched_yield();
                     }
                 };
-
-
 
                 struct context_t;
 
