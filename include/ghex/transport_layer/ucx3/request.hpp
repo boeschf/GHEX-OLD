@@ -48,13 +48,13 @@ namespace gridtools {
                             //std::cout << "destructor of request" << std::endl;
                             if (m_worker->m_shared)
                             {
-                            //const typename worker_t::lock_type lock(*(m_worker->m_mutex));
-                            m_worker->lock();
-                            ucp_request_free(m_ptr);
-                            m_worker->unlock();
+                                //const typename worker_t::lock_type lock(*(m_worker->m_mutex));
+                                m_worker->lock();
+                                ucp_request_free(m_ptr);
+                                m_worker->unlock();
                             }
                             else
-                            ucp_request_free(m_ptr);
+                                ucp_request_free(m_ptr);
                         }
                         m_ptr = other.m_ptr;
                         m_worker = other.m_worker;
@@ -73,13 +73,49 @@ namespace gridtools {
                             //std::cout << "destructor of request" << std::endl;
                             if (m_worker->m_shared)
                             {
-                            m_worker->lock();
-                            //const typename worker_t::lock_type lock(*(m_worker->m_mutex));
-                            ucp_request_free(m_ptr);
-                            m_worker->unlock();
+                                m_worker->lock();
+                                //const typename worker_t::lock_type lock(*(m_worker->m_mutex));
+                                ucp_request_free(m_ptr);
+                                m_worker->unlock();
                             }
                             else
-                            ucp_request_free(m_ptr);
+                                ucp_request_free(m_ptr);
+                        }
+                    }
+
+                    bool test_only()
+                    {
+                        if (!m_ptr) return true;
+                        
+                        if (!m_worker->m_shared)
+                        {
+                            // thread unsafe is ok here
+                                
+                            // check for completion
+                            if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
+                            {
+                                ucp_request_free(m_ptr);
+                                m_ptr = nullptr;
+                                return true;
+                            }
+                            else
+                                return false;
+                        }
+                        else
+                        {
+                            m_worker->lock();
+                            if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
+                            {
+                                ucp_request_free(m_ptr);
+                                m_ptr = nullptr;
+                                m_worker->unlock();
+                                return true;
+                            }
+                            else
+                            {
+                                m_worker->unlock();
+                                return false;
+                            }
                         }
                     }
 

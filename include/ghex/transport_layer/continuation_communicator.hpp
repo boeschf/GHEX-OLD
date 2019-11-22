@@ -126,7 +126,7 @@ namespace gridtools{
                     {
                         virtual bool ready() = 0;
                         virtual bool test_only() = 0;
-                        virtual void progress_only() = 0;
+                        //virtual void progress_only() = 0;
                         virtual ~iface() {}
                     };
 
@@ -138,7 +138,7 @@ namespace gridtools{
                         holder(Future&& fut): m_future{std::move(fut)} {}
                         bool ready() override { return m_future.ready(); }
                         bool test_only() override { return m_future.test_only(); }
-                        void progress_only() override { m_future.progress_only(); }
+                        //void progress_only() override { m_future.progress_only(); }
                     };
 
                     std::unique_ptr<iface> m_ptr;
@@ -148,7 +148,7 @@ namespace gridtools{
 
                     bool ready() { return m_ptr->ready(); }
                     bool test_only() { return m_ptr->test_only(); }
-                    void progress_only() { m_ptr->progress_only(); }
+                    //void progress_only() { m_ptr->progress_only(); }
                 };
 
 
@@ -471,12 +471,12 @@ namespace gridtools{
                     element_type* ptr = nullptr;
                     if (d.pop(ptr))
                     {
-                        if (!ptr->m_future.test_only())
+                        /*if (!ptr->m_future.test_only())
                         {
                             ptr->m_future.progress_only();
-                        }
-                        if (ptr->m_future.test_only())
-                        //if (ptr->m_future.ready())
+                        }*/
+                        //if (ptr->m_future.test_only())
+                        if (ptr->m_future.ready())
                         {
                             // call the callback
                             ptr->m_cb(std::move(ptr->m_msg), ptr->m_rank, ptr->m_tag);
