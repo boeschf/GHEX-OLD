@@ -104,26 +104,26 @@ namespace gridtools {
                         {
                             if (!m_moved)
                             {
-                                ucs_status_ptr_t request = ucp_worker_flush_nb(m_worker, 0, &ucp_worker_handle::empty_send_cb);
-                                if (reinterpret_cast<std::uintptr_t>(request) == UCS_OK)
-                                {
-                                    /* done */
-                                }
-                                else if (UCS_PTR_IS_ERR(request))
-                                {
-                                    std::terminate();
-                                }
-                                else
-                                {
-                                    ucs_status_t status;
-                                    do
-                                    {
-                                        ucp_worker_progress(m_worker);
-                                        status = ucp_request_check_status(request);
-                                    }
-                                    while( status == UCS_INPROGRESS);
-                                    ucp_request_release(request);
-                                }
+                                //ucs_status_ptr_t request = ucp_worker_flush_nb(m_worker, 0, &ucp_worker_handle::empty_send_cb);
+                                //if (reinterpret_cast<std::uintptr_t>(request) == UCS_OK)
+                                //{
+                                //    /* done */
+                                //}
+                                //else if (UCS_PTR_IS_ERR(request))
+                                //{
+                                //    std::terminate();
+                                //}
+                                //else
+                                //{
+                                //    ucs_status_t status;
+                                //    do
+                                //    {
+                                //        ucp_worker_progress(m_worker);
+                                //        status = ucp_request_check_status(request);
+                                //    }
+                                //    while( status == UCS_INPROGRESS);
+                                //    ucp_request_release(request);
+                                //}
                                 ucp_worker_destroy(m_worker);
                             }
                         }

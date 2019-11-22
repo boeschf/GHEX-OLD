@@ -283,27 +283,10 @@ namespace gridtools {
                             {
                                 // thread safe here
                                 
-                                /*if (m_worker->try_lock())
-                                {
-                                    if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
-                                    {
-                                        ucp_request_free(m_ptr);
-                                        m_ptr = nullptr;
-                                        m_worker->unlock();
-                                        return;
-                                    }
-                                    else
-                                        m_worker->unlock();
-                                }*/
-
                                 while (true)
                                 {
                                     if (m_worker->try_lock())
                                     {
-                                        // progress a few times
-                                        ucp_worker_progress(m_worker->get());
-                                        //ucp_worker_progress(m_worker->get());
-                                        //ucp_worker_progress(m_worker->get());
                                     
                                         if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                         {
@@ -312,6 +295,11 @@ namespace gridtools {
                                             m_worker->unlock();
                                             return;
                                         }
+                                        // progress a few times
+                                        ucp_worker_progress(m_worker->get());
+                                        //ucp_worker_progress(m_worker->get());
+                                        //ucp_worker_progress(m_worker->get());
+                                        
                                         m_worker->unlock();
 
                                         // progress recv worker
@@ -328,29 +316,20 @@ namespace gridtools {
                         {
                             // receive request
                             // needs tread safety always
-                            /*if (m_worker->try_lock())
-                            {
-                                if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
-                                {
-                                    m_worker->unlock();
-                                    return;
-                                }
-                                else
-                                    m_worker->unlock();
-                            }*/
 
                             while (true)
                             {
                                 if (m_worker->try_lock())
                                 {
-                                    // progress 
-                                    ucp_worker_progress(m_worker->get());
-                                
                                     if (ucp_request_check_status(m_ptr) != UCS_INPROGRESS)
                                     {
                                         m_worker->unlock();
                                         return;
                                     }
+
+                                    // progress 
+                                    ucp_worker_progress(m_worker->get());
+                                
                                     m_worker->unlock();
 
                                     // progress send worker
